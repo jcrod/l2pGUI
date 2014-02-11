@@ -15,9 +15,9 @@ from matplotlib.backends.backend_tkagg import NavigationToolbar2TkAgg
 import time
 import datetime as dt
 import noaasun
-import funplot as fp
-import plot_plist2 as pp2
-import satpar as sp
+#import funplot as fp
+#import plot_plist2 as pp2
+#import satpar as sp
 
 
 def dataFakeRead(f, init_pos=None):
@@ -444,14 +444,15 @@ class L2pRadar(Tk.Tk):
 
 def main():
     # First, some house keeping with a hammer
-    p = subprocess.Popen(['ps', 'aux'], stdout=subprocess.PIPE)
-    ps, err = p.communicate()
-    ps = ps.splitlines()
-    lines = [l for l in ps if l.find('l2pGUI.py') != -1]
-    pids = [l.split()[1] for l in lines]
-    pids = pids[:-3]
-    for pid in pids:
-        subprocess.call(['kill', pid])
+    if (sys.platform == 'linux') or (sys.platform == 'linux2'):
+        p = subprocess.Popen(['ps', 'aux'], stdout=subprocess.PIPE)
+        ps, err = p.communicate()
+        ps = ps.splitlines()
+        lines = [l for l in ps if l.find('l2pGUI.py') != -1]
+        pids = [l.split()[1] for l in lines]
+        pids = pids[:-3]
+        for pid in pids:
+            subprocess.call(['kill', pid])
     
     # Start now
     app = L2pRadar(None)

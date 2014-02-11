@@ -1,5 +1,5 @@
 #!/usr/bin/env python
 
-from l2pGUI import l2pGUI
+from l2pGUI import l2pGUI as l2p
 
-l2pGUI.main()
+l2p.main()
