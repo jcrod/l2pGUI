@@ -36,23 +36,25 @@ def dataFakeRead(f, init_pos=None):
         f.seek(0, 2)
         init_pos = f.tell()
     f.seek(init_pos)
-    lines = []
+    plines, tlines = [], []
     i = 0
     while True:
         line = f.readline()
         if not line:
             print 'EOF ' + '%d lines read' % i
             pos = f.tell()
-            yield lines, pos
+            yield plines, tlines, pos
         l = line.split()
-        if len(l) == 12:
-            lines.append(line)
+        if len(l) == 13:
+            plines.append(line)
+        elif len(l) == 6:
+            tlines.append(line)
         i += 1
-        if i > 5000:
+        if i > 50:
             print line
             break
     pos = f.tell()
-    yield lines, pos
+    yield plines, tlines, pos
     
 
 def dataFakeGen():
@@ -60,9 +62,8 @@ def dataFakeGen():
     them to a second file at periodic intervals. Useful to simulate 
     incoming real time data from l2planes in conjunction with dataFakeRead().
     """
-    import time
     f_write = open('fakeoutput.out', 'w')
-    f_read = open('/home/jose/data/l2planes/l2p18vlong.out', 'r')
+    f_read = open('dump.out', 'r')
     N = 60
     while True:
         for n in range(N):
@@ -237,8 +238,10 @@ class ConnectionL2P():
 class L2pRadar(Tk.Tk):
     """Real-time polar plot of ADS-B planes data received from listen2planes
     """
-    def __init__(self, parent):
-        Tk.Tk.__init__(self, parent)
+    def __init__(self, replay=None):
+        Tk.Tk.__init__(self)
+        self.replay = replay
+        print self.replay
         self.root = Tk.Tk._root(self)
         self.root.configure(background='black')
         self.l2p_HOST = '193.61.194.29'
@@ -260,15 +263,17 @@ class L2pRadar(Tk.Tk):
         self.protocol("WM_DELETE_WINDOW", self.close)
         self.framePlot = Tk.Frame()
         self.framePlot.pack(side='left', fill=Tk.BOTH, expand=1)
-        # ----------------------------------------------------------------- #
-        #   Uncomment the following lines for testing L2pRadar with fake    #
-        # data input read from a file. See dataFakeRead() and dataFakeGen() #
-        # ----------------------------------------------------------------- #
-        #self.datafile = open('fakeoutput.out', 'r')
-        #self.datafile.seek(0, 2)
-        #self.pos = self.datafile.tell()        
-        self.setFig()
-        self.run(newcon=True)
+        
+        # Read data from file if requested...
+        if self.replay is True:
+            self.datafile = open('dump.out', 'r')
+            self.pos = self.datafile.tell()
+            self.setFig()
+            self.run(newcon=False)
+        # Otherwise proceed normally
+        elif self.replay is False:
+            self.setFig()
+            self.run(newcon=True)
         
     def setFig(self):
         '''Sets figure up'''
@@ -369,14 +374,15 @@ class L2pRadar(Tk.Tk):
     def animate(self, i):
         """Matplotlib animation function
         """
-        # ----------------------------------------------------------------- #
-        #       Uncomment the next two lines for off-line testing           #
-        # ----------------------------------------------------------------- #
-        #planeLines, self.pos = dataFakeRead(self.datafile, self.pos).next()
-        #self.P = addPlanes(planeLines, self.P, minel=1)
-        
-        planeLines, telLines = self.l2p_conn.dump_queue()
-        self.P = addPlanes(planeLines, self.P, minel=10)
+        # Read data from dump.out if requested...
+        if self.replay is True:
+            planeLines, telLines, self.pos = (
+                                dataFakeRead(self.datafile, self.pos).next())
+            self.P = addPlanes(planeLines, self.P, minel=1)
+        # or grab data via TCP/IP normally
+        elif self.replay is False:
+            planeLines, telLines = self.l2p_conn.dump_queue()
+            self.P = addPlanes(planeLines, self.P, minel=10)
         
         x = [p.az[-60:] for p in self.P.values()[:15]]
         y = [p.el[-60:] for p in self.P.values()[:15]]
@@ -442,8 +448,11 @@ class L2pRadar(Tk.Tk):
         self.canvas.draw()
         
 
-def main():
-    # First, some house keeping with a hammer
+def main(argv=None):
+    argv = sys.argv[-1]
+    replay = True if argv == 'replay' else False
+    
+    # Some house keeping with a hammer for linux systems
     if (sys.platform == 'linux') or (sys.platform == 'linux2'):
         p = subprocess.Popen(['ps', 'aux'], stdout=subprocess.PIPE)
         ps, err = p.communicate()
@@ -455,7 +464,7 @@ def main():
             subprocess.call(['kill', pid])
     
     # Start now
-    app = L2pRadar(None)
+    app = L2pRadar(replay)
     app.mainloop()
     
 if __name__ == "__main__":
