@@ -10,6 +10,7 @@ matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 from matplotlib import cm
+from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.backends.backend_tkagg import NavigationToolbar2TkAgg
 import time
@@ -196,7 +197,7 @@ class L2pRadar(Tk.Tk):
         self.buttonLimitDown.pack(side='top', fill=Tk.X)
         self.buttonHEO.pack(side='top', fill=Tk.X)
         self.protocol("WM_DELETE_WINDOW", self.close)
-        self.framePlot = Tk.Frame()
+        self.framePlot = Tk.Frame(self.root)
         self.framePlot.pack(side='left', fill=Tk.BOTH, expand=1)
         
         # Read data from file if requested...
@@ -212,11 +213,11 @@ class L2pRadar(Tk.Tk):
         
     def setFig(self):
         '''Sets figure up'''
-        self.fig1 = plt.figure(facecolor='black', figsize=(6, 6))
+        self.fig1 = Figure(facecolor='black', figsize=(6, 6))
         self.canvas = FigureCanvasTkAgg(self.fig1, master=self.framePlot)
         self.canvas.get_tk_widget().pack(fill=Tk.BOTH, expand=1)
         self.ax = self.fig1.add_subplot(111, projection='polar')
-        plt.subplots_adjust(bottom=0.03, top=0.97, left=0.03, right=0.97)
+        self.fig1.subplots_adjust(bottom=0.03, top=0.97, left=0.03, right=0.97)
         self.ax.set_axis_bgcolor('black')
         self.ax.spines['polar'].set_color('white')
         self.ax.grid(color='white', lw=2)
@@ -303,7 +304,8 @@ class L2pRadar(Tk.Tk):
         """
         # Grab data via TCP/IP normally...
         if self.replay is False:
-            planeLines, telLines = dump_queue(self.planeQueue)
+            lines = dump_queue(self.planeQueue)
+            planeLines, telLines = process_lines(print_output=True, dump=False)
             self.P = addPlanes(planeLines, self.P, minel=10)
         # or read data from dump.out if requested
         elif self.replay is True:
@@ -365,7 +367,22 @@ class L2pRadar(Tk.Tk):
         
         return (self.lines + self.tel_line + self.sun_line + 
                 self.points +  self.heos)
+    
+    def process_lines(self, lines, print_output=False, dump=False):
+        if print_output is True:
+            print lines
+        if dump is True:
+            self.fdump.write(lines + ' \n')
             
+        tlines, plines = [], []
+        for line in lines:
+            L = len(line.split())
+            if L == 13:
+                plines.append(line)
+            elif L == 6:
+                tlines.append(line)
+        return tlines, plines
+    
     def run(self, newcon=False):
         """Matplotlib animation loop"""
         if self.appRunning is True:
@@ -389,26 +406,6 @@ class L2pRadar(Tk.Tk):
         self.root.destroy()
         print '\nExiting...\n'
         sys.exit()
-        
-        
-def main(argv=None):
-    argv = sys.argv[-1]
-    replay = True if argv == 'replay' else False
-    
-    # Some house keeping with a hammer for linux systems
-    if (sys.platform == 'linux') or (sys.platform == 'linux2'):
-        p = subprocess.Popen(['ps', 'aux'], stdout=subprocess.PIPE)
-        ps, err = p.communicate()
-        ps = ps.splitlines()
-        lines = [l for l in ps if l.find('l2pGUI.py') != -1]
-        pids = [l.split()[1] for l in lines]
-        pids = pids[:-3]
-        for pid in pids:
-            subprocess.call(['kill', pid])
-    
-    # Start now
-    app = L2pRadar(replay)
-    app.mainloop()
 
 
 def receive_proc(planeQueue):
@@ -436,22 +433,33 @@ def receive_proc(planeQueue):
 
 def dump_queue(planeQueue):
     """Retrieves all the data lines from the queue."""
-    plines, tlines = [], []
+    lines = []
     #print('Queue size: {}'.format(self.planeQueue.qsize())),
     while True:
-        this_line = planeQueue.get()
-        print this_line
-        #if dump is True:
-            #self.fdump.write(this_line + ' \n')
-        L = len(this_line.split())
-        if L == 13:
-            plines.append(this_line)
-        elif L == 6:
-            tlines.append(this_line)
+        lines.append(planeQueue.get())
         if planeQueue.qsize() == 0:
             break
-    return plines, tlines
+    return lines
 
 
+def main(argv=None):
+    argv = sys.argv[-1]
+    replay = True if argv == 'replay' else False
+    
+    # Some house keeping with a hammer for linux systems
+    if (sys.platform == 'linux') or (sys.platform == 'linux2'):
+        p = subprocess.Popen(['ps', 'aux'], stdout=subprocess.PIPE)
+        ps, err = p.communicate()
+        ps = ps.splitlines()
+        lines = [l for l in ps if l.find('l2pGUI.py') != -1]
+        pids = [l.split()[1] for l in lines]
+        pids = pids[:-3]
+        for pid in pids:
+            subprocess.call(['kill', pid])
+    # Start now
+    app = L2pRadar(replay)
+    app.mainloop()
+    
+    
 if __name__ == "__main__":
     sys.exit(main())
