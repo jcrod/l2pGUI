@@ -156,7 +156,7 @@ def addPlanes(planeLines, planes_dict, minel=15):
         else:
             P[plane_id].addLine(l)
 
-    initial_lenP = len(P)
+    lenP_init = len(P)
     if len(P) == 0 or len(planeLines) == 0:
         return P
     # Remove planes with no epochs (below elevation cutoff) and those
@@ -167,72 +167,8 @@ def addPlanes(planeLines, planes_dict, minel=15):
     keys_to_remove = keys1.union(keys2)
     for key in list(keys_to_remove):
         del P[key]
-    print 'len(P): {} {} (-{})'.format(initial_lenP, len(P), len(keys_to_remove))
+    print 'len(P): {} {} (-{})'.format(lenP_init, len(P), len(keys_to_remove))
     return P
-
-
-class ConnectionL2P():
-    """Handles connection with l2planes server, creates queue subproces 
-    and sends data from the former to the latter.
-    """
-    def __init__(self, l2p_HOST, l2p_PORT):
-        self.planeQueue = multiprocessing.Queue()
-        try:
-            self.connSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        except socket.error, msg:
-            print 'Failed to create socket: ' + str(msg[0]) + ' ; ' + msg[1]
-            raise SystemExit
-        print '\nSocket Created\n'
-        self.connSocket.settimeout(10)
-        try:        
-            self.connSocket.connect((l2p_HOST, l2p_PORT))
-        except socket.error, msg:
-            print 'Failed to connect: ' + str(msg)
-            print '\nIs the listen2planes server running?\n'
-            raise SystemExit
-        
-        self.procWorker = multiprocessing.Process(target=self.receive_proc,
-                          args=(self.connSocket, self.planeQueue))
-        self.procWorker.start()
-        
-        self.fdump = open('dump.out', 'w')
-
-    def receive_proc(self, connSocket, planeQueue):
-        """Requests one data line from l2planes and sends it to the queue.
-        """      
-        while True:
-            # Send string expected by listen2planes from clients
-            try:
-                connSocket.send('reader')
-            except socket.error, msg:
-                print('Failed to receive from server: '.format(msg))
-                time.sleep(0.5)                
-            try:
-                data = connSocket.recv(1024)
-            except socket.error, msg:
-                print('Failed to receive from sserver: {}'.format(msg))
-                time.sleep(0.5)                
-            else:
-                planeQueue.put(data)
-        return
-        
-    def dump_queue(self):
-        """Retrieves all the data lines from the queue."""
-        plines = []
-        tlines = []
-        #print('Queue size: {}'.format(self.planeQueue.qsize())),
-        while True:
-            this_line = self.planeQueue.get()
-            self.fdump.write(this_line + ' \n')
-            print this_line
-            L = len(this_line.split())
-            if L == 13:
-                plines.append(this_line)
-            elif L == 6:
-                tlines.append(this_line)
-            if self.planeQueue.qsize() == 0:
-                break
-        return plines, tlines
 
 
 class L2pRadar(Tk.Tk):
@@ -351,14 +287,6 @@ class L2pRadar(Tk.Tk):
             gels.append(90 - gazelr[0, 1] * 180 / np.pi)
         self.heos[0].set_data(gazs, gels)        
 
-    def close(self):
-        """Closes GUI application and worker subprocess"""
-        if self.replay is False:
-            self.l2p_conn.procWorker.terminate()
-        self.destroy()
-        print '\nExiting...\n'
-        sys.exit()
-        
     def anim_init(self):
         """Initial plot state"""
         #self.ax.set_ylim(0, self.yhigh)
@@ -375,7 +303,7 @@ class L2pRadar(Tk.Tk):
         """
         # Grab data via TCP/IP normally...
         if self.replay is False:
-            planeLines, telLines = self.l2p_conn.dump_queue()
+            planeLines, telLines = dump_queue(self.planeQueue)
             self.P = addPlanes(planeLines, self.P, minel=10)
         # or read data from dump.out if requested
         elif self.replay is True:
@@ -443,13 +371,26 @@ class L2pRadar(Tk.Tk):
         if self.appRunning is True:
             return
         self.appRunning = True
+        
         if newcon is True:
-            self.l2p_conn = ConnectionL2P(self.l2p_HOST, 2020)
+            self.planeQueue = multiprocessing.Queue()
+            self.procWorker = multiprocessing.Process(target=receive_proc, args=[self.planeQueue])
+            self.procWorker.start()
+            
         self.anim = animation.FuncAnimation(self.fig1, self.animate,
                init_func=self.anim_init, blit=True, interval=1000)
-        #self.canvas.draw()
-        
 
+    def close(self):
+        """Closes GUI application and worker subprocess"""
+        if self.replay is False:
+            self.procWorker.terminate()
+            self.planeQueue.close()
+            #self.l2p_conn.procWorker.terminate()
+        self.root.destroy()
+        print '\nExiting...\n'
+        sys.exit()
+        
+        
 def main(argv=None):
     argv = sys.argv[-1]
     replay = True if argv == 'replay' else False
@@ -468,10 +409,49 @@ def main(argv=None):
     # Start now
     app = L2pRadar(replay)
     app.mainloop()
-    
+
+
+def receive_proc(planeQueue):
+    """Requests one data line from l2planes and sends it to the queue.
+    """
+    connSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    connSocket.connect(('193.61.194.29', 2020))
+
+    while True:
+        # Send string expected by listen2planes from clients
+        try:
+            connSocket.send('reader')
+        except socket.error, msg:
+            print('Failed to receive from server: '.format(msg))
+            time.sleep(0.5)                
+        try:
+            data = connSocket.recv(256)
+        except socket.error, msg:
+            print('Failed to receive from sserver: {}'.format(msg))
+            time.sleep(0.5)                
+        else:
+            planeQueue.put(data)
+    return
+
+
+def dump_queue(planeQueue):
+    """Retrieves all the data lines from the queue."""
+    plines, tlines = [], []
+    #print('Queue size: {}'.format(self.planeQueue.qsize())),
+    while True:
+        this_line = planeQueue.get()
+        print this_line
+        #if dump is True:
+            #self.fdump.write(this_line + ' \n')
+        L = len(this_line.split())
+        if L == 13:
+            plines.append(this_line)
+        elif L == 6:
+            tlines.append(this_line)
+        if planeQueue.qsize() == 0:
+            break
+    return plines, tlines
+
+
 if __name__ == "__main__":
-    main()
-
-
-
-
+    sys.exit(main())
