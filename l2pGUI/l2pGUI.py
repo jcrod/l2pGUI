@@ -241,7 +241,6 @@ class L2pRadar(Tk.Tk):
     def __init__(self, replay=None):
         Tk.Tk.__init__(self)
         self.replay = replay
-        print self.replay
         self.root = Tk.Tk._root(self)
         self.root.configure(background='black')
         self.l2p_HOST = '193.61.194.29'
@@ -270,7 +269,7 @@ class L2pRadar(Tk.Tk):
             self.pos = self.datafile.tell()
             self.setFig()
             self.run(newcon=False)
-        # Otherwise proceed normally
+        # otherwise proceed normally
         elif self.replay is False:
             self.setFig()
             self.run(newcon=True)
@@ -293,10 +292,11 @@ class L2pRadar(Tk.Tk):
             label.set_color('white')
         self.lines = sum((self.ax.plot([], [], lw=4, markeredgewidth=0)
                           for n in range(15)), [])
-        self.points = sum((self.ax.plot([], [], 'o', markeredgewidth=0, ms=6,
-                           color='w') for n in range(15)), [])
+        self.points = sum((self.ax.plot([], [], 'o', markeredgewidth=0, 
+                           ms=6, color='w') for n in range(15)), [])
         self.tel_line = self.ax.plot([], [], 'o', color='#00ff00', ms=10)
-        self.sun_line = self.ax.plot([], [], 'o', color='#ffff00', ms=25, alpha=0.9)
+        self.sun_line = self.ax.plot([], [], 'o', color='#ffff00', ms=25,
+                                     alpha=0.9)
         #self.sunav_line = self.ax.plot([], [], color='#ffff00')
         self.yhigh = 80
         self.ax.set_ylim(0, self.yhigh)
@@ -335,7 +335,8 @@ class L2pRadar(Tk.Tk):
     def plotHEO(self):
         pp2.getPlist(tmpath=self.tmpath)            
         with open(os.path.join(self.tmpath, 'plist.out')) as f:
-            heo_list = [line for line in f if line.split()[1][:2].upper() in ['GL', 'CO', 'GI', 'ET', 'GA', 'GP']]
+            heo_list = [line for line in f if line.split()[1][:2].upper() in
+                        ['GL', 'CO', 'GI', 'ET', 'GA', 'GP']]
         utcnow = dt.datetime.utcnow()
         epoch = utcnow.second + 60 * (utcnow.minute + 60 * utcnow.hour)
         gazs, gels = [], []
@@ -349,11 +350,11 @@ class L2pRadar(Tk.Tk):
             gazs.append(gazelr[0, 0])
             gels.append(90 - gazelr[0, 1] * 180 / np.pi)
         self.heos[0].set_data(gazs, gels)        
-        
-    
+
     def close(self):
         """Closes GUI application and worker subprocess"""
-        self.l2p_conn.procWorker.terminate()
+        if self.replay is False:
+            self.l2p_conn.procWorker.terminate()
         self.destroy()
         print '\nExiting...\n'
         sys.exit()
@@ -364,43 +365,44 @@ class L2pRadar(Tk.Tk):
         for line, point in zip(self.lines, self.points):
             line.set_data([], [])
             point.set_data([], [])
-        self.tel_line[0].set_data([], [])
-        self.sun_line[0].set_data([], [])
-        self.heos[0].set_data([], [])
+        for line in [self.tel_line, self.sun_line, self.heos]:
+            line[0].set_data([], [])
         return (self.lines + self.tel_line + self.sun_line + 
                 self.points + self.heos)
-
         
     def animate(self, i):
         """Matplotlib animation function
         """
-        # Read data from dump.out if requested...
-        if self.replay is True:
+        # Grab data via TCP/IP normally...
+        if self.replay is False:
+            planeLines, telLines = self.l2p_conn.dump_queue()
+            self.P = addPlanes(planeLines, self.P, minel=10)
+        # or read data from dump.out if requested
+        elif self.replay is True:
             planeLines, telLines, self.pos = (
                                 dataFakeRead(self.datafile, self.pos).next())
             self.P = addPlanes(planeLines, self.P, minel=1)
-        # or grab data via TCP/IP normally
-        elif self.replay is False:
-            planeLines, telLines = self.l2p_conn.dump_queue()
-            self.P = addPlanes(planeLines, self.P, minel=10)
         
+        # Az/El from last 15 planes present in the dictionary, grabbing 
+        # only the last 60 positions available
         x = [p.az[-60:] for p in self.P.values()[:15]]
         y = [p.el[-60:] for p in self.P.values()[:15]]
         colours = ((p.el[-1] + 5) / 100 for p in self.P.values())
 
+        # Telescope position
         try:
             # 56692  41847.094 telscp  75.00  65.00 1
             telPos = telLines[0].split()[3:5]
         except IndexError:
             self.telAz = self.telEl = 0
-            #print '\n' + '#' * 40
-            #print sys.exc_info()[0]
-            #print '#' * 40 + '\n'
         else:
             self.telAz, self.telEl = float(telPos[0]), float(telPos[1][:4])
             
         telAz = float(self.telAz * np.pi / 180)
         telEl = float(90 - self.telEl)
+        self.tel_line[0].set_data(telAz, telEl)
+        
+        # Update Sun position every 10 animation steps
         if i % 10 == 0:
             sunAz, sunEl = noaasun.sunpos(JD='now')
             sunAz = sunAz * np.pi / 180
@@ -408,17 +410,17 @@ class L2pRadar(Tk.Tk):
             #t = np.arange(0, 2 * np.pi, 0.2)
             #x = sunAz
             #self.sunav_line[0].set_data(t, sunEl + 15 * np.cos(t))
+            
         nplanes = len(x)
         if nplanes > 0:
-            self.tel_line[0].set_data(telAz, telEl)
             for j, line, point in (
                         zip(range(len(self.lines)), self.lines, self.points)):
                 line.set_data(x[j], y[j])
                 line.set_color(cm.jet_r(colours.next()))
                 point.set_data(x[j][-1], y[j][-1])
                 if j == nplanes - 1:
-                    for point, line in (
-                            zip(self.points[nplanes:], self.lines[nplanes:])):
+                    for line, point in (
+                            zip(self.lines[nplanes:], self.points[nplanes:])):
                         line.set_data([], [])
                         point.set_data([], [])
                     break
@@ -444,8 +446,8 @@ class L2pRadar(Tk.Tk):
         if newcon is True:
             self.l2p_conn = ConnectionL2P(self.l2p_HOST, 2020)
         self.anim = animation.FuncAnimation(self.fig1, self.animate,
-               init_func=self.anim_init, blit=True, interval=1000, repeat=True)
-        self.canvas.draw()
+               init_func=self.anim_init, blit=True, interval=1000)
+        #self.canvas.draw()
         
 
 def main(argv=None):
