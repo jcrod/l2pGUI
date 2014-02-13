@@ -56,23 +56,6 @@ def dataFakeRead(f, init_pos=None):
             break
     pos = f.tell()
     yield plines, tlines, pos
-    
-
-def dataFakeGen():
-    """Reads data chunks from a saved l2planes output file and writes
-    them to a second file at periodic intervals. Useful to simulate 
-    incoming real time data from l2planes in conjunction with dataFakeRead().
-    """
-    f_write = open('fakeoutput.out', 'w')
-    f_read = open('dump.out', 'r')
-    N = 60
-    while True:
-        for n in range(N):
-            line = f_read.readline()    
-            f_write.write(line)
-            f_write.flush()    
-        sys.stdout.flush()
-        time.sleep(0.5)
 
     
 def colourMaplimits(value_limits=(0, 80), colourmap_limits=(0.05, 0.85)):
@@ -356,7 +339,6 @@ class L2pRadar(Tk.Tk):
             X = r * np.cos(alpha)
             Y = r * np.sin(alpha)
             A = sunAz + X * np.pi / 180
-            sunEl = 45
             B = (90 - sunEl) * np.cos(sunAz) + Y
             
             self.sunav_line[0].set_data(A, B)
