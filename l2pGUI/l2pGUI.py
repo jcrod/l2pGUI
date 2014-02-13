@@ -51,7 +51,7 @@ def dataFakeRead(f, init_pos=None):
         elif len(l) == 6:
             tlines.append(line)
         i += 1
-        if i > 50:
+        if i > 60:
             print line
             break
     pos = f.tell()
@@ -191,10 +191,13 @@ class L2pRadar(Tk.Tk):
                              command=self.plotLimitUp, bg='grey')
         self.buttonLimitDown = Tk.Button(self.frameCtrls, text='Dn',
                                command=self.plotLimitDown, bg='grey')
+        self.buttonRotate = Tk.Button(self.frameCtrls, text='Rot',
+                               command=self.plotRotate, bg='grey')
         self.buttonHEO = Tk.Button(self.frameCtrls, text='HEO',
                                    command=self.displayHEO, bg='grey')
         self.buttonLimitUp.pack(side='top', fill=Tk.X)
         self.buttonLimitDown.pack(side='top', fill=Tk.X)
+        self.buttonRotate.pack(side='top', fill=Tk.X)
         self.buttonHEO.pack(side='top', fill=Tk.X)
         self.protocol("WM_DELETE_WINDOW", self.close)
         self.framePlot = Tk.Frame(self.root)
@@ -222,7 +225,8 @@ class L2pRadar(Tk.Tk):
         self.ax.spines['polar'].set_color('white')
         self.ax.grid(color='white', lw=2)
         self.ax.set_theta_direction(-1)
-        self.ax.set_theta_offset(-np.pi)
+        self.theta_offset = -np.pi
+        self.ax.set_theta_offset(self.theta_offset)
         self.ax.set_yticks(range(0, 90, 10))
         self.ax.set_yticklabels([''] +  map(str, range(80, 0, -10)))
         for label in self.ax.get_xticklabels() + self.ax.get_yticklabels():
@@ -234,12 +238,19 @@ class L2pRadar(Tk.Tk):
         self.tel_line = self.ax.plot([], [], 'o', color='#00ff00', ms=10)
         self.sun_line = self.ax.plot([], [], 'o', color='#ffff00', ms=25,
                                      alpha=0.9)
-        #self.sunav_line = self.ax.plot([], [], color='#ffff00')
+        self.sunav_line = self.ax.plot([], [], color='#ffff00')
         self.yhigh = 80
         self.ax.set_ylim(0, self.yhigh)
         
         self.heos = self.ax.plot([], [], 'o', color='red')
     
+    def plotRotate(self):
+        self.theta_offset += np.pi / 2
+        self.ax.set_theta_offset(self.theta_offset)
+        self.anim._stop()
+        self.appRunning = False
+        self.run(newcon=False)
+        
     def plotLimitUp(self):
         self.yhigh = self.yhigh - 10
         self.ax.set_yticks(range(0, self.yhigh, 10))
@@ -294,10 +305,10 @@ class L2pRadar(Tk.Tk):
         for line, point in zip(self.lines, self.points):
             line.set_data([], [])
             point.set_data([], [])
-        for line in [self.tel_line, self.sun_line, self.heos]:
+        for line in [self.tel_line, self.sun_line, self.heos, self.sunav_line]:
             line[0].set_data([], [])
         return (self.lines + self.tel_line + self.sun_line + 
-                self.points + self.heos)
+                self.points + self.heos  + self.sunav_line)
         
     def animate(self, i):
         """Matplotlib animation function
@@ -305,7 +316,8 @@ class L2pRadar(Tk.Tk):
         # Grab data via TCP/IP normally...
         if self.replay is False:
             lines = dump_queue(self.planeQueue)
-            planeLines, telLines = self.process_lines(lines, print_output=True, dump=True)
+            planeLines, telLines = self.process_lines(lines, 
+                                            print_output=True, dump=False)
             self.P = addPlanes(planeLines, self.P, minel=10)
         # or read data from dump.out if requested
         elif self.replay is True:
@@ -337,9 +349,17 @@ class L2pRadar(Tk.Tk):
             sunAz, sunEl = noaasun.sunpos(JD='now')
             sunAz = sunAz * np.pi / 180
             self.sun_line[0].set_data(sunAz, 90 - sunEl)
-            #t = np.arange(0, 2 * np.pi, 0.2)
-            #x = sunAz
-            #self.sunav_line[0].set_data(t, sunEl + 15 * np.cos(t))
+            
+            a, b = 0, 0
+            r = 20
+            alpha = np.linspace(0, 2 * np.pi + 0.1, 30)
+            X = r * np.cos(alpha)
+            Y = r * np.sin(alpha)
+            A = sunAz + X * np.pi / 180
+            sunEl = 45
+            B = (90 - sunEl) * np.cos(sunAz) + Y
+            
+            self.sunav_line[0].set_data(A, B)
             
         nplanes = len(x)
         if nplanes > 0:
@@ -366,9 +386,9 @@ class L2pRadar(Tk.Tk):
         sys.stdout.flush()
         
         return (self.lines + self.tel_line + self.sun_line + 
-                self.points +  self.heos)
+                self.points +  self.heos + self.sunav_line)
     
-    def process_lines(self, lines, print_output=True, dump=True):
+    def process_lines(self, lines, print_output=True, dump=False):
         tlines, plines = [], []
         for line in lines:
             if print_output is True:
@@ -388,8 +408,6 @@ class L2pRadar(Tk.Tk):
             return
         self.appRunning = True
         
-        self.fdump = open('dump.out', 'w')
-        
         if newcon is True:
             self.planeQueue = multiprocessing.Queue()
             self.procWorker = multiprocessing.Process(target=receive_proc, args=[self.planeQueue])
@@ -403,7 +421,6 @@ class L2pRadar(Tk.Tk):
         if self.replay is False:
             self.procWorker.terminate()
             self.planeQueue.close()
-            #self.l2p_conn.procWorker.terminate()
         self.root.destroy()
         print '\nExiting...\n'
         sys.exit()
