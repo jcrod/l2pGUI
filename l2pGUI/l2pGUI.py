@@ -208,8 +208,8 @@ class L2pRadar(Tk.Tk):
         self.ax.spines['polar'].set_color('white')
         self.ax.grid(color='white', lw=2)
         self.ax.set_theta_direction(-1)
-        self.theta_offset = -np.pi
-        self.ax.set_theta_offset(self.theta_offset)
+        self.theta_offset = 2
+        self.ax.set_theta_offset(self.theta_offset * np.pi/2)
         self.ax.set_yticks(range(0, 90, 10))
         self.ax.set_yticklabels([''] +  map(str, range(80, 0, -10)))
         for label in self.ax.get_xticklabels() + self.ax.get_yticklabels():
@@ -219,20 +219,24 @@ class L2pRadar(Tk.Tk):
         self.points = sum((self.ax.plot([], [], 'o', markeredgewidth=0, 
                            ms=6, color='w') for n in range(15)), [])
         self.tel_line = self.ax.plot([], [], 'o', color='#00ff00', ms=10)
-        self.sun_line = self.ax.plot([], [], 'o', color='#ffff00', ms=25,
+        self.sun_line = self.ax.plot([], [], 'o', color='gold', ms=25,
                                      alpha=0.9)
-        self.sunav_line = self.ax.plot([], [], color='#ffff00')
+        self.sunav_line = self.ax.plot([], [], color='gold', lw=2)
         self.yhigh = 80
         self.ax.set_ylim(0, self.yhigh)
         
         self.heos = self.ax.plot([], [], 'o', color='red')
     
     def plotRotate(self):
-        self.theta_offset += np.pi / 2
-        self.ax.set_theta_offset(self.theta_offset)
+        self.theta_offset = self.theta_offset + 1
+        self.ax.set_theta_offset(self.theta_offset * np.pi / 2)
         self.anim._stop()
         self.appRunning = False
         self.run(newcon=False)
+        offsets = np.array([0, 1, 2, 3])
+        dirs = {0:'RIGHT', 1:'TOP', 2:'LEFT', 3:'BOTTOM'}
+        idx = np.isclose(offsets, np.mod(self.theta_offset, 4))
+        print('\nNORTH set to {}\n'.format(dirs[np.nonzero(idx)[0][0]]))
         
     def plotLimitUp(self):
         self.yhigh = self.yhigh - 10
@@ -333,15 +337,19 @@ class L2pRadar(Tk.Tk):
             sunAz = sunAz * np.pi / 180
             self.sun_line[0].set_data(sunAz, 90 - sunEl)
             
-            a, b = 0, 0
-            r = 20
-            alpha = np.linspace(0, 2 * np.pi + 0.1, 30)
-            X = r * np.cos(alpha)
-            Y = r * np.sin(alpha)
-            A = sunAz + X * np.pi / 180
-            B = (90 - sunEl) * np.cos(sunAz) + Y
-            
-            self.sunav_line[0].set_data(A, B)
+            # Draw Sun avoidance region            
+            if sunEl > -20:
+                radius = 15
+                theta = np.linspace(0, 2 * np.pi, 40)
+                X = radius * np.cos(theta)
+                Y = radius * np.sin(theta)
+                A = (sunAz + X * np.pi / 180)            
+                B = (90 - sunEl) + Y
+                az_corr = 1 / np.cos((90 - B) * np.pi / 180)
+                A = A + (A - sunAz) * az_corr
+                self.sunav_line[0].set_data(A, B)
+            else:
+                self.sunav_line[0].set_data(0, 0)
             
         nplanes = len(x)
         if nplanes > 0:
