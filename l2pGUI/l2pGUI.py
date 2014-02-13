@@ -305,7 +305,7 @@ class L2pRadar(Tk.Tk):
         # Grab data via TCP/IP normally...
         if self.replay is False:
             lines = dump_queue(self.planeQueue)
-            planeLines, telLines = process_lines(print_output=True, dump=False)
+            planeLines, telLines = self.process_lines(lines, print_output=True, dump=True)
             self.P = addPlanes(planeLines, self.P, minel=10)
         # or read data from dump.out if requested
         elif self.replay is True:
@@ -368,26 +368,27 @@ class L2pRadar(Tk.Tk):
         return (self.lines + self.tel_line + self.sun_line + 
                 self.points +  self.heos)
     
-    def process_lines(self, lines, print_output=False, dump=False):
-        if print_output is True:
-            print lines
-        if dump is True:
-            self.fdump.write(lines + ' \n')
-            
+    def process_lines(self, lines, print_output=True, dump=True):
         tlines, plines = [], []
         for line in lines:
+            if print_output is True:
+                print line + '\n'
+            if dump is True:
+                self.fdump.write(line + ' \n')
             L = len(line.split())
             if L == 13:
                 plines.append(line)
             elif L == 6:
                 tlines.append(line)
-        return tlines, plines
+        return plines, tlines
     
     def run(self, newcon=False):
         """Matplotlib animation loop"""
         if self.appRunning is True:
             return
         self.appRunning = True
+        
+        self.fdump = open('dump.out', 'w')
         
         if newcon is True:
             self.planeQueue = multiprocessing.Queue()
