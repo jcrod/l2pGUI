@@ -31,7 +31,7 @@ def dataFakeRead(f, init_pos=None, N_lines=60):
     At the moment this function has no concept of time, it simply reads
     a number of lines specified by parameter N_lines. This means that
     the display speed will only be similar to reality if the data packets 
-    were detected at similar rates. Ergo, one can speed up the replayed 
+    were detected at similar rates. Thus, one can speed up the replayed 
     animation by increasing this number, at the cost of increased choppiness.
     
     It would be trivial to make this function time aware.
@@ -94,6 +94,7 @@ class Plane():
         l = line.split()
         self.minel = minel
         self.id = l[2]
+        self.code = l[3]
         self.epc = []
         self.last_epoch = float(l[1])
         #self.lat = []
@@ -102,8 +103,8 @@ class Plane():
         #self.ran = []
         self.az = []
         self.el = []
-        self.maxel = 0
-        self.gaps = 0
+        self.maxel = -10    # maximum observed plane elevation (starting value)
+        self.gaps = 0       # times the same plane id has been observed - 1
         self.addLine(l)
 
     # 56395 40400.326   4ca626 RYR8JT   50.97158 -0.61729 29525 68.6683
@@ -128,7 +129,7 @@ class Plane():
             #self.alt.append(float(l[6]) * 0.3048)
             #self.ran.append(float(l[7]))
             self.az.append(np.pi / 180 * float(l[8]))
-            self.el.append(90 - float(l[9]))
+            self.el.append(float(l[9]))
             self.maxel = self.el[-1] if self.el[-1] > self.maxel else self.maxel
 
 
@@ -243,12 +244,10 @@ class L2pRadar(Tk.Tk):
         self.sun_line = self.ax.plot([], [], 'o', color='gold',
                                      ms=25, alpha=0.8)
         self.sunav_line = self.ax.plot([], [], color='gold', lw=2)
-        self.yhigh = 80
+        self.yhigh = 90
         self.ax.set_ylim(0, self.yhigh)
-        
         self.heos = self.ax.plot([], [], 'o', color='red')
     
-
     def plotLimitUp(self):
         """Decrease plot elevation range"""
         self.yhigh = self.yhigh - 10
@@ -264,7 +263,7 @@ class L2pRadar(Tk.Tk):
         """Increse plot elevation range"""
         self.yhigh = self.yhigh + 10
         self.ax.set_yticks(range(0, self.yhigh, 10))
-        self.ax.set_ylim(0, self.yhigh)    
+        self.ax.set_ylim(0, self.yhigh)
         self.anim._stop()
         self.appRunning = False
         self.run(newcon=False)
@@ -321,87 +320,6 @@ class L2pRadar(Tk.Tk):
             line[0].set_data([], [])
         return (self.lines + self.tel_line + self.sun_line + 
                 self.points + self.heos  + self.sunav_line)
-
-    def animate(self, i):
-        """Matplotlib animation function"""
-        # Grab data via TCP/IP normally...
-        if not self.replay:
-            lines = dump_queue(self.planeQueue)
-            planeLines, telLines = self.process_lines(lines, 
-                                                      print_output=True,
-                                                      dump=self.dump2file)
-            self.P = addPlanes(planeLines, self.P, minel=10)
-        # or read data from dump.out if requested
-        elif self.replay:
-            planeLines, telLines, self.pos = (
-                                dataFakeRead(self.datafile, self.pos).next())
-            self.P = addPlanes(planeLines, self.P, minel=1)
-        
-        # Az/El from last 15 planes present in the dictionary, 
-        # grabbing only the last 60 positions available
-        x = [p.az[-60:] for p in self.P.values()[:15]]
-        y = [p.el[-60:] for p in self.P.values()[:15]]
-        colours = ((p.el[-1] + 5) / 100 for p in self.P.values())
-
-        # Telescope position
-        try:
-            # 56692  41847.094 telscp  75.00  65.00 1
-            telPos = telLines[0].split()[3:5]
-        except IndexError:
-            self.telAz = self.telEl = 0
-        else:
-            self.telAz, self.telEl = float(telPos[0]), float(telPos[1][:4])
-            
-        telAz = float(self.telAz * np.pi / 180)
-        telEl = float(90 - self.telEl)
-        self.tel_line[0].set_data(telAz, telEl)
-        
-        # Update Sun position every 10 animation steps
-        if i % 10 == 0:
-            sunAz, sunEl = noaasun.sunpos(JD='now')
-            sunAz = sunAz * np.pi / 180
-            self.sun_line[0].set_data(sunAz, 90 - sunEl)
-            
-            # Draw Sun avoidance region            
-            if sunEl > -20:
-                radius = 15
-                theta = np.linspace(0, 2 * np.pi, 40)
-                X = radius * np.cos(theta)
-                Y = radius * np.sin(theta)
-                A = (sunAz + X * np.pi / 180)            
-                B = (90 - sunEl) + Y
-                az_corr = 1 / np.cos((90 - B) * np.pi / 180)
-                A = A + (A - sunAz) * az_corr
-                self.sunav_line[0].set_data(A, B)
-            else:
-                self.sunav_line[0].set_data(0, 0)
-            
-        nplanes = len(x)
-        if nplanes > 0:
-            for j, line, point in (
-                        zip(range(len(self.lines)), self.lines, self.points)):
-                line.set_data(x[j], y[j])
-                line.set_color(cm.jet_r(colours.next()))
-                point.set_data(x[j][-1], y[j][-1])
-                if j == nplanes - 1:
-                    for line, point in (
-                            zip(self.lines[nplanes:], self.points[nplanes:])):
-                        line.set_data([], [])
-                        point.set_data([], [])
-                    break
-        else:
-            self.lines[0].set_data([], [])
-            self.points[0].set_data([], [])
-        
-        if (self.visHEO is True) and (i % 15 == 0):
-            self.plotHEO()
-        elif self.visHEO is False:
-            self.heos[0].set_data([], [])
-            
-        #sys.stdout.flush()
-        
-        return (self.lines + self.tel_line + self.sun_line + 
-                self.points +  self.heos + self.sunav_line)
     
     def process_lines(self, lines, print_output=True, dump=False):
         """Processes data lines according to length
@@ -428,6 +346,97 @@ class L2pRadar(Tk.Tk):
             elif L == 6:
                 tlines.append(line)
         return plines, tlines
+    
+    def el2zdist(self, x):
+        """Elevation to zenith distance (degrees)"""
+        return 90 - x
+    
+    def animate(self, i):
+        """Matplotlib animation function"""
+        # Grab data via TCP/IP normally...
+        if not self.replay:
+            lines = dump_queue(self.planeQueue)
+            planeLines, telLines = self.process_lines(lines, 
+                                                      print_output=False,
+                                                      dump=self.dump2file)
+            self.P = addPlanes(planeLines, self.P, minel=10)
+        # or read data from dump.out if requested
+        elif self.replay:
+            planeLines, telLines, self.pos = (
+                                dataFakeRead(self.datafile, self.pos).next())
+            self.P = addPlanes(planeLines, self.P, minel=1)
+        
+        # Az/El from last 15 planes present in the dictionary, 
+        # grabbing only the last 60 positions available
+        x = [p.az[-60:] for p in self.P.values()[:15]]
+        y = [p.el[-60:] for p in self.P.values()[:15]]
+        colours = ((p.el[-1] + 5) / 100 for p in self.P.values())
+
+        # Telescope position
+        try:
+            # 56692  41847.094 telscp  75.00  65.00 1
+            telPos = telLines[0].split()[3:5]
+        except IndexError:
+            telAz = telEl = 0
+        else:
+            telAz, telEl = float(telPos[0]), float(telPos[1][:4])
+            
+        telAz = float(telAz * np.pi / 180)
+        self.tel_line[0].set_data(telAz, 90 - telEl)
+        
+        
+        # Formatted ouput
+        for plane in self.P.values():
+            strf = '{:8s}{:8s}{:5.0f} {:4.1f}' 
+            print(strf.format(plane.id, plane.code, 
+                              plane.az[-1] * 180 / np.pi, plane.el[-1]))
+        
+        # Update Sun position every 10 animation steps
+        if i % 10 == 0:
+            sunAz, sunEl = noaasun.sunpos(JD='now')
+            sunAz = sunAz * np.pi / 180
+            self.sun_line[0].set_data(sunAz, 90 - sunEl)
+            
+            # Draw Sun avoidance region            
+            if sunEl > -20:
+                radius = 15
+                theta = np.linspace(0, 2 * np.pi, 40)
+                X = radius * np.cos(theta)
+                Y = radius * np.sin(theta)
+                A = (sunAz + X * np.pi / 180)            
+                B = sunEl + Y
+                az_corr = 1 / np.cos(B * np.pi / 180)
+                A = A + (A - sunAz) * az_corr
+                self.sunav_line[0].set_data(A, 90 - B)
+            else:
+                self.sunav_line[0].set_data(0, 0)
+            
+        nplanes = len(x)
+        if nplanes > 0:
+            for j, line, point in (
+                        zip(range(len(self.lines)), self.lines, self.points)):
+                line.set_data(x[j], map(self.el2zdist, (y[j])))
+                line.set_color(cm.jet_r(colours.next()))
+                point.set_data(x[j][-1], self.el2zdist(y[j][-1]))
+                if j == nplanes - 1:
+                    for line, point in (
+                            zip(self.lines[nplanes:], self.points[nplanes:])):
+                        line.set_data([], [])
+                        point.set_data([], [])
+                    break
+        else:
+            self.lines[0].set_data([], [])
+            self.points[0].set_data([], [])
+        
+        if (self.visHEO is True) and (i % 15 == 0):
+            self.plotHEO()
+        elif self.visHEO is False:
+            self.heos[0].set_data([], [])
+            
+        #sys.stdout.flush()
+        
+        return (self.lines + self.tel_line + self.sun_line + 
+                self.points +  self.heos + self.sunav_line)
     
     def run(self, newcon=False):
         """Start subprocesses and Matplotlib animation loop"""
