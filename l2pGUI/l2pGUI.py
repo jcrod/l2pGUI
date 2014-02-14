@@ -91,6 +91,7 @@ class Plane():
     def __init__(self, line, minel=10):
         l = line.split()
         self.minel = minel
+        self.mjd = []
         self.id = l[2]
         self.code = l[3]
         self.epc = []
@@ -121,6 +122,7 @@ class Plane():
                 self.gaps = 1
                 del(self.epc[-1])
                 return
+            self.mjd.append(float(l[0]))
             self.last_epoch = self.epc[-1]
             self.lat.append(float(l[4]))
             self.lon.append(float(l[5]))
@@ -412,19 +414,21 @@ class L2pRadar(Tk.Tk):
             self.heos[0].set_data([], [])
             
         # Telescope position
-        try:
-            # 56692  41847.094 telscp  75.00  65.00 1
-            telPos = self.telLines.split()[3:5]
-        except IndexError:
-            telAz = telEl = 0
-        else:
-            telAz, telEl = float(telPos[0]), float(telPos[1][:4])
-        telAz = float(telAz * np.pi / 180)
+        # 56692  41847.094 telscp  75.00  65.00 1
+        telPos = self.telLines.split()[3:5]
+        telAz = float(telPos[0]) * np.pi / 180
+        telEl = float(telPos[1][:4])
         self.tel_line[0].set_data(telAz, 90 - telEl)
         
         # Update Sun position every 10 animation steps
         if i % 10 == 0:
-            sunAz, sunEl = noaasun.sunpos(JD='now')
+            if self.replay:
+                mjd = self.P.values()[0].mjd[-1] + self.P.values()[0].epc[-1] / 86400
+                sunAz, sunEl = noaasun.sunpos(JD=2400000.5 + mjd)
+            else:
+                d, JD = noaasun.parseDates(mode='now')
+                sunAz, sunEl = noaasun.sunpos(JD)
+                
             sunAz = sunAz * np.pi / 180
             self.sun_line[0].set_data(sunAz, 90 - sunEl)
             

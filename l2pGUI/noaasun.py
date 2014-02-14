@@ -9,8 +9,9 @@ by Jean Meeus. Implementation from the online NOAA solar calculator:
 
 import sys
 import string
-from datetime import datetime
+import datetime as dt
 import numpy as np
+import argparse
 import coords as cd
 
 D2R = np.pi / 180
@@ -167,31 +168,11 @@ def refr_corr(elsun):
         c = 0
 
     return c    
-
-    
-def dealWithJDdates(JD='now'):
-    '''Returns dates needed for the calculation.
-    
-    If input is the default "now", the output will be the current UTC date.
-    '''
-    date = JD
-    if date == 'now':
-            d = datetime.utcnow()
-            date = (d.year, d.month, d.day, d.hour, d.minute, d.second)
-    else:
-        date = [float(n) for n in date.split(',')]
-    iy, im, iday, ih, imin, iss = tuple(date)
-
-    JD = cd.gcal2jd(iy, im, iday)
-    fd = cd.hms2s(ih, imin, iss) / 86400.
-    JD = JD + fd
-    return iy, im, iday, ih, imin, iss, JD
     
 
-def sunpos(JD='now', Lon=0.3361, Lat=50.8674):
+def sunpos(JD, Lon=0.3361, Lat=50.8674):
     '''Returns Sun's azimuth and elevation at specified epoch and location
     '''
-    iy, im, iday, ih, imin, iss, JD = dealWithJDdates(JD)
     sun_radec, eq_time = sunradeceqtime(JD)
     (azsun, elsun), suntimes = sunradec2azel(sun_radec[1], eq_time, JD,
                                              Lon=Lon, Lat=Lat)
@@ -214,17 +195,62 @@ def pretty_print(name, ih, im, iss):
     line_str = '   {:22s}: {:0=2.0f}:{:0=2.0f}:{:0=2.0f}'
     print(line_str).format(name, ih, im, iss)
     return
+
     
+def parseDates(date=None, mode='mjd'):
+    if mode == 'greg':
+        try:
+            d = dt.datetime.strptime(date, '%Y-%m-%d %H:%M:%S')
+        except ValueError, error:
+            print('Could not parse date: {}'.format(error))
+            sys.exit()
+        fd = cd.hms2s(d.hour, d.minute, d.second) / 86400.
+        JD = cd.gcal2jd(d.year, d.month, d.day) + fd
+    elif mode == 'mjd':
+        iy, im, iday, fd = cd.jd2gcal(2400000.5 + date)
+        ih, imin, iss = cd.s2hms(fd * 86400)
+        d = dt.datetime(*[int(n) for n in (iy, im, iday, ih, imin, iss)])
+        JD = 2400000.5 + date
+    elif mode == 'now':
+        d = dt.datetime.utcnow()
+        fd = cd.hms2s(d.hour, d.minute, d.second) / 86400.    
+        JD = cd.gcal2jd(d.year, d.month, d.day) + fd
+    return d, JD
+
 
 def main(date=None):
-    if date is None:
-        if len(sys.argv) < 2:
-            date = 'now'
-        else:
-            date = sys.argv[1]
-    iy, im, iday, ih, imin, iss, JD = dealWithJDdates(date)
-
-    Lon, Lat = 0.3361, 50.8674
+    parser = argparse.ArgumentParser(description='Sun position and rise times')
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument('-n', '--now', action='store_true',
+                        help='Current date and time')
+    group.add_argument('-g', '--gregorian', 
+                        help='Gregorian calendar input yyyy-mm-dd hh:mm:ss',
+                        nargs='+')
+    group.add_argument('-mjd', '--modifiedJulianDate', 
+                        help='Modified Julian date input', type=float)
+    group.add_argument('-jd', '--julianDate', 
+                        help='Julian date input', type=float)
+    parser.add_argument('-lon', '--longitude', 
+                        help='Longitude of observing station', type=float)
+    parser.add_argument('-lat', '--latitude', 
+                        help='Latitude of observing station', type=float)
+    args = parser.parse_args()
+    
+    if args.gregorian:
+        if len(args.gregorian) == 1:
+            args.gregorian.append('00:00:00')
+        d, JD = parseDates(' '.join([s for s in args.gregorian]), mode='greg')
+    elif args.modifiedJulianDate:
+        d, JD = parseDates(args.modifiedJulianDate, mode='mjd')
+    elif args.julianDate:
+        d, JD = parseDates(args.modifiedJulianDate - 2400000.5, mode='mjd')
+    else:
+        d, JD = parseDates(mode='now')
+    
+    iy, im, iday, ih, imin, iss, _, _, _ = d.timetuple()
+    
+    Lon = 0.3361 if not args.longitude else args.longitude
+    Lat = 50.8674 if not args.latitude else args.latitude
     
     (azsun, elsun), suntimes = sunpos_and_times(JD, Lon=Lon, Lat=Lat)
     (sunrise, solnoon, sunset, sunldur, 
