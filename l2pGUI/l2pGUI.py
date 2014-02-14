@@ -185,9 +185,9 @@ class L2pRadar(Tk.Tk):
         self.dump2file = dump2file
         self.root = Tk.Tk._root(self)
         self.root.configure(background='black')
+        self.root.title('l2pGUI')
         self.l2p_HOST = '193.61.194.29'
         self.tmpath = os.path.expanduser('~/.plotsched_tmp')
-        self.appRunning = False
         self.visHEO = False
         self.P = {}
         self.frameCtrls = Tk.Frame()
@@ -256,7 +256,6 @@ class L2pRadar(Tk.Tk):
         # Since the animation is blitted we need to restart it or
         # the changes above will only last one animation cycle
         self.anim._stop()
-        self.appRunning = False
         self.run(newcon=False)
         
     def plotLimitDown(self):
@@ -265,7 +264,6 @@ class L2pRadar(Tk.Tk):
         self.ax.set_yticks(range(0, self.yhigh, 10))
         self.ax.set_ylim(0, self.yhigh)
         self.anim._stop()
-        self.appRunning = False
         self.run(newcon=False)
         
     def plotRotate(self):
@@ -275,7 +273,6 @@ class L2pRadar(Tk.Tk):
         dirs = {0:'RIGHT', 1:'TOP', 2:'LEFT', 3:'BOTTOM'}
         print('\nNORTH set to {}\n'.format(dirs[self.theta_offset]))
         self.anim._stop()
-        self.appRunning = False
         self.run(newcon=False)
         
     def displayHEO(self):
@@ -286,7 +283,6 @@ class L2pRadar(Tk.Tk):
             self.buttonHEO.configure(bg='green', activebackground='green')
             self.plotHEO()
             self.anim._stop()
-            self.appRunning = False
             self.run(newcon=False)    
         else:
             self.buttonHEO.configure(bg='grey', activebackground='grey')
@@ -340,12 +336,12 @@ class L2pRadar(Tk.Tk):
                               plane.lon[-1], plane.lat[-1],
                               plane.alt[-1], plane.ran[-1]))
             
-    def process_lines(self, lines, print_output=True, dump=False):
+    def process_lines(self, data_lines, print_output=True, dump=False):
         """Processes data lines according to length
         
         Parameters
         ----------
-        lines: list of data lines
+        data_lines: list of data lines
         print_output: boolean flag to request printed output
         dump: boolean flag to request written output
         
@@ -354,7 +350,7 @@ class L2pRadar(Tk.Tk):
         plines, tlines: lists containing plane and telescope lines
         """
         tlines, plines = [], []
-        for line in lines:
+        for line in data_lines:
             if print_output is True:
                 print line + '\n'
             if dump is True:
@@ -370,8 +366,8 @@ class L2pRadar(Tk.Tk):
         """Update planes dictionary with data from queue or from dump file"""
         # Grab data via TCP/IP normally...
         if not self.replay:
-            lines = dump_queue(self.planeQueue)
-            planeLines, telLines = self.process_lines(lines, 
+            data_lines = dump_queue(self.planeQueue)
+            planeLines, telLines = self.process_lines(data_lines, 
                                                       print_output=False,
                                                       dump=self.dump2file)
             self.P = addPlanes(planeLines, self.P, minel=10)
@@ -383,7 +379,10 @@ class L2pRadar(Tk.Tk):
         self.telLines = telLines[-1]
         
     def animate(self, i):
-        """Matplotlib animation function"""
+        """Matplotlib animation function
+        
+        NB Here 'lines' refers to plot lines, not data lines
+        """
         self.updateData()
         self.formattedOutput()
         
@@ -451,10 +450,6 @@ class L2pRadar(Tk.Tk):
     
     def run(self, newcon=False):
         """Start subprocesses and Matplotlib animation loop"""
-        if self.appRunning is True:
-            return
-        self.appRunning = True
-        
         if newcon is True:
             self.planeQueue = multiprocessing.Queue()
             self.procWorker = multiprocessing.Process(target=receive_proc,
@@ -498,12 +493,12 @@ def receive_proc(planeQueue):
 
 def dump_queue(planeQueue):
     """Retrieves all the data lines from the queue"""
-    lines = []
+    data_lines = []
     while True:
         lines.append(planeQueue.get())
         if planeQueue.qsize() == 0:
             break
-    return lines
+    return data_lines
 
 
 def main(argv=None):
