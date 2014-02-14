@@ -3,8 +3,10 @@
 import sys, os
 import numpy as np
 import Tkinter as Tk
-import socket, multiprocessing
+import socket
+import multiprocessing
 import subprocess
+import argparse
 import matplotlib
 matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
@@ -25,9 +27,7 @@ def dataFakeRead(f, init_pos=None):
     """Reads lines from file from specified position to end.
     
     For testing purposes: let f be a saved l2planes output; calling
-    this function at regular intervals will simulate real time data,
-    provided the f is also being written continuously. Launch function 
-    dataFakeGen from another Python terminal to generate such a file.
+    this function at regular intervals will simulate real time data.
     
     This function is a generator which behaves similarly to Unix tail,
     but the caller is responsible for keeping track of file position
@@ -158,9 +158,10 @@ def addPlanes(planeLines, planes_dict, minel=15):
 class L2pRadar(Tk.Tk):
     """Real-time polar plot of ADS-B planes data received from listen2planes
     """
-    def __init__(self, replay=None):
+    def __init__(self, replay=None, dump2file=False):
         Tk.Tk.__init__(self)
         self.replay = replay
+        self.dump2file = dump2file
         self.root = Tk.Tk._root(self)
         self.root.configure(background='black')
         self.l2p_HOST = '193.61.194.29'
@@ -187,13 +188,13 @@ class L2pRadar(Tk.Tk):
         self.framePlot.pack(side='left', fill=Tk.BOTH, expand=1)
         
         # Read data from file if requested...
-        if self.replay is True:
-            self.datafile = open('dump.out', 'r')
+        if self.replay:
+            self.datafile = open(self.replay, 'r')
             self.pos = self.datafile.tell()
             self.setFig()
             self.run(newcon=False)
         # otherwise proceed normally
-        elif self.replay is False:
+        else:
             self.setFig()
             self.run(newcon=True)
         
@@ -220,7 +221,7 @@ class L2pRadar(Tk.Tk):
                            ms=6, color='w') for n in range(15)), [])
         self.tel_line = self.ax.plot([], [], 'o', color='#00ff00', ms=10)
         self.sun_line = self.ax.plot([], [], 'o', color='gold', ms=25,
-                                     alpha=0.9)
+                                     alpha=0.8)
         self.sunav_line = self.ax.plot([], [], color='gold', lw=2)
         self.yhigh = 80
         self.ax.set_ylim(0, self.yhigh)
@@ -228,15 +229,13 @@ class L2pRadar(Tk.Tk):
         self.heos = self.ax.plot([], [], 'o', color='red')
     
     def plotRotate(self):
-        self.theta_offset = self.theta_offset + 1
+        self.theta_offset = np.mod(self.theta_offset + 1, 4)
         self.ax.set_theta_offset(self.theta_offset * np.pi / 2)
+        dirs = {0:'RIGHT', 1:'TOP', 2:'LEFT', 3:'BOTTOM'}
+        print('\nNORTH set to {}\n'.format(dirs[self.theta_offset]))
         self.anim._stop()
         self.appRunning = False
         self.run(newcon=False)
-        offsets = np.array([0, 1, 2, 3])
-        dirs = {0:'RIGHT', 1:'TOP', 2:'LEFT', 3:'BOTTOM'}
-        idx = np.isclose(offsets, np.mod(self.theta_offset, 4))
-        print('\nNORTH set to {}\n'.format(dirs[np.nonzero(idx)[0][0]]))
         
     def plotLimitUp(self):
         self.yhigh = self.yhigh - 10
@@ -301,13 +300,13 @@ class L2pRadar(Tk.Tk):
         """Matplotlib animation function
         """
         # Grab data via TCP/IP normally...
-        if self.replay is False:
+        if not self.replay:
             lines = dump_queue(self.planeQueue)
             planeLines, telLines = self.process_lines(lines, 
-                                            print_output=True, dump=False)
+                                            print_output=True, dump=self.dump2file)
             self.P = addPlanes(planeLines, self.P, minel=10)
         # or read data from dump.out if requested
-        elif self.replay is True:
+        elif self.replay:
             planeLines, telLines, self.pos = (
                                 dataFakeRead(self.datafile, self.pos).next())
             self.P = addPlanes(planeLines, self.P, minel=1)
@@ -373,7 +372,7 @@ class L2pRadar(Tk.Tk):
         elif self.visHEO is False:
             self.heos[0].set_data([], [])
             
-        sys.stdout.flush()
+        #sys.stdout.flush()
         
         return (self.lines + self.tel_line + self.sun_line + 
                 self.points +  self.heos + self.sunav_line)
@@ -400,7 +399,8 @@ class L2pRadar(Tk.Tk):
         
         if newcon is True:
             self.planeQueue = multiprocessing.Queue()
-            self.procWorker = multiprocessing.Process(target=receive_proc, args=[self.planeQueue])
+            self.procWorker = multiprocessing.Process(target=receive_proc,
+                                                      args=[self.planeQueue])
             self.procWorker.start()
             
         self.anim = animation.FuncAnimation(self.fig1, self.animate,
@@ -451,8 +451,11 @@ def dump_queue(planeQueue):
 
 
 def main(argv=None):
-    argv = sys.argv[-1]
-    replay = True if argv == 'replay' else False
+    parser = argparse.ArgumentParser(description='listen2planes display client')
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument('-r', '--replay', help='Replay plane data from specified file')
+    group.add_argument('-d', '--dump2file', help='Write collected data to file')
+    args = parser.parse_args()
     
     # Some house keeping with a hammer for linux systems
     if (sys.platform == 'linux') or (sys.platform == 'linux2'):
@@ -465,7 +468,7 @@ def main(argv=None):
         for pid in pids:
             subprocess.call(['kill', pid])
     # Start now
-    app = L2pRadar(replay)
+    app = L2pRadar(replay=args.replay, dump2file=args.dump2file)
     app.mainloop()
     
     
