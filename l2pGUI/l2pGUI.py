@@ -14,7 +14,6 @@ import matplotlib.animation as animation
 from matplotlib import cm
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-from matplotlib.backends.backend_tkagg import NavigationToolbar2TkAgg
 import time
 import datetime as dt
 import noaasun
@@ -23,11 +22,19 @@ import noaasun
 #import satpar as sp
 
 
-def dataFakeRead(f, init_pos=None):
+def dataFakeRead(f, init_pos=None, N_lines=60):
     """Reads lines from file from specified position to end.
     
-    For testing purposes: let f be a saved l2planes output; calling
-    this function at regular intervals will simulate real time data.
+    Let f be a saved l2planes output; calling this function at 
+    regular intervals will simulate real time data.
+    
+    At the moment this function has no concept of time, it simply reads
+    a number of lines specified by parameter N_lines. This means that
+    the display speed will only be similar to reality if the data packets 
+    were detected at similar rates. Ergo, one can speed up the replayed 
+    animation by increasing this number, at the cost of increased choppiness.
+    
+    It would be trivial to make this function time aware.
     
     This function is a generator which behaves similarly to Unix tail,
     but the caller is responsible for keeping track of file position
@@ -51,7 +58,7 @@ def dataFakeRead(f, init_pos=None):
         elif len(l) == 6:
             tlines.append(line)
         i += 1
-        if i > 60:
+        if i > N_lines:
             print line
             break
     pos = f.tell()
@@ -62,7 +69,7 @@ def colourMaplimits(value_limits=(0, 80), colourmap_limits=(0.05, 0.85)):
     """Compute a and b coefficients that bring values from value_limits
     to colourmap_limits in a linear way.
     
-    I.e., solve y = (x - a) / b
+    I.e., simply solve y = (x - a) / b
     
     where x is a value from value_limits and y the corresponding one
     in colourmap_limits.
@@ -78,7 +85,11 @@ def colourMaplimits(value_limits=(0, 80), colourmap_limits=(0.05, 0.85)):
     
         
 class Plane():
-    '''Makes planes.'''
+    """Makes planes.
+    
+    This class takes plane lines from l2planes and stores the relevant
+    information for later use
+    """
     def __init__(self, line, minel=10):
         l = line.split()
         self.minel = minel
@@ -121,15 +132,17 @@ class Plane():
             self.maxel = self.el[-1] if self.el[-1] > self.maxel else self.maxel
 
 
-def addPlanes(planeLines, planes_dict, minel=15):
-    """Processes list of plane data lines and updates planes dictionary
-    accordingly.
+def addPlanes(planeLines, planes_dict, minel=15, time_alive=15):
+    """Processes plane data lines and updates planes dictionary accordingly.
     
     Parameters
     ----------
-    planeLines: list of plane lines from l2planes to process
-    planes_dict: dictionary storing planes (keys: id; values: Plane instances)
+    planeLines: list of plane lines from l2planes
+    planes_dict: dictionary storing planes
+                 keys: plane id; values: Plane instances
     minel: elevation cutoff
+    time_alive: seconds to wait before discarding planes for which
+                no beacons have been received 
     """
     P = planes_dict
     for line in planeLines:
@@ -144,10 +157,11 @@ def addPlanes(planeLines, planes_dict, minel=15):
     if len(P) == 0 or len(planeLines) == 0:
         return P
     # Remove planes with no epochs (below elevation cutoff) and those
-    # for which no beacons have been received for more than 15 seconds
+    # for which no beacons have been received for more than given time
     keys1 = {k for k,v in P.iteritems() if len(v.epc) == 0}
     last_epoch = float(l[1])
-    keys2 = {k for k,v in P.iteritems() if abs(last_epoch - v.last_epoch) > 15}
+    keys2 = {k for k,v in P.iteritems() if 
+                                 abs(last_epoch - v.last_epoch) > time_alive}
     keys_to_remove = keys1.union(keys2)
     for key in list(keys_to_remove):
         del P[key]
@@ -157,6 +171,12 @@ def addPlanes(planeLines, planes_dict, minel=15):
 
 class L2pRadar(Tk.Tk):
     """Real-time polar plot of ADS-B planes data received from listen2planes
+    
+    Parameters
+    ----------
+    replay: if specified, listen2planes data previously written 
+            to this file will be displayed
+    dump2file: if True, collected data will be written to a file
     """
     def __init__(self, replay=None, dump2file=False):
         Tk.Tk.__init__(self)
@@ -179,10 +199,10 @@ class L2pRadar(Tk.Tk):
                                command=self.plotRotate, bg='grey')
         self.buttonHEO = Tk.Button(self.frameCtrls, text='HEO',
                                    command=self.displayHEO, bg='grey')
-        self.buttonLimitUp.pack(side='top', fill=Tk.X)
-        self.buttonLimitDown.pack(side='top', fill=Tk.X)
-        self.buttonRotate.pack(side='top', fill=Tk.X)
-        self.buttonHEO.pack(side='top', fill=Tk.X)
+        self.buttonLimitUp.pack(side='top', fill=Tk.X, pady=2)
+        self.buttonLimitDown.pack(side='top', fill=Tk.X, pady=2)
+        self.buttonRotate.pack(side='top', fill=Tk.X, pady=2)
+        self.buttonHEO.pack(side='top', fill=Tk.X, pady=2)
         self.protocol("WM_DELETE_WINDOW", self.close)
         self.framePlot = Tk.Frame(self.root)
         self.framePlot.pack(side='left', fill=Tk.BOTH, expand=1)
@@ -197,9 +217,9 @@ class L2pRadar(Tk.Tk):
         else:
             self.setFig()
             self.run(newcon=True)
-        
+
     def setFig(self):
-        '''Sets figure up'''
+        """Sets figure up"""
         self.fig1 = Figure(facecolor='black', figsize=(6, 6))
         self.canvas = FigureCanvasTkAgg(self.fig1, master=self.framePlot)
         self.canvas.get_tk_widget().pack(fill=Tk.BOTH, expand=1)
@@ -220,35 +240,41 @@ class L2pRadar(Tk.Tk):
         self.points = sum((self.ax.plot([], [], 'o', markeredgewidth=0, 
                            ms=6, color='w') for n in range(15)), [])
         self.tel_line = self.ax.plot([], [], 'o', color='#00ff00', ms=10)
-        self.sun_line = self.ax.plot([], [], 'o', color='gold', ms=25,
-                                     alpha=0.8)
+        self.sun_line = self.ax.plot([], [], 'o', color='gold',
+                                     ms=25, alpha=0.8)
         self.sunav_line = self.ax.plot([], [], color='gold', lw=2)
         self.yhigh = 80
         self.ax.set_ylim(0, self.yhigh)
         
         self.heos = self.ax.plot([], [], 'o', color='red')
     
-    def plotRotate(self):
-        self.theta_offset = np.mod(self.theta_offset + 1, 4)
-        self.ax.set_theta_offset(self.theta_offset * np.pi / 2)
-        dirs = {0:'RIGHT', 1:'TOP', 2:'LEFT', 3:'BOTTOM'}
-        print('\nNORTH set to {}\n'.format(dirs[self.theta_offset]))
-        self.anim._stop()
-        self.appRunning = False
-        self.run(newcon=False)
-        
+
     def plotLimitUp(self):
+        """Decrease plot elevation range"""
         self.yhigh = self.yhigh - 10
         self.ax.set_yticks(range(0, self.yhigh, 10))
         self.ax.set_ylim(0, self.yhigh)
+        # Since the animation is blitted we need to restart it or
+        # the changes above will only last one animation cycle
         self.anim._stop()
         self.appRunning = False
         self.run(newcon=False)
         
     def plotLimitDown(self):
+        """Increse plot elevation range"""
         self.yhigh = self.yhigh + 10
         self.ax.set_yticks(range(0, self.yhigh, 10))
         self.ax.set_ylim(0, self.yhigh)    
+        self.anim._stop()
+        self.appRunning = False
+        self.run(newcon=False)
+        
+    def plotRotate(self):
+        """Rotate plot"""
+        self.theta_offset = np.mod(self.theta_offset + 1, 4)
+        self.ax.set_theta_offset(self.theta_offset * np.pi / 2)
+        dirs = {0:'RIGHT', 1:'TOP', 2:'LEFT', 3:'BOTTOM'}
+        print('\nNORTH set to {}\n'.format(dirs[self.theta_offset]))
         self.anim._stop()
         self.appRunning = False
         self.run(newcon=False)
@@ -267,6 +293,7 @@ class L2pRadar(Tk.Tk):
             self.buttonHEO.configure(bg='grey', activebackground='grey')
     
     def plotHEO(self):
+        """Plot predicted HEO satellites"""
         pp2.getPlist(tmpath=self.tmpath)            
         with open(os.path.join(self.tmpath, 'plist.out')) as f:
             heo_list = [line for line in f if line.split()[1][:2].upper() in
@@ -287,7 +314,6 @@ class L2pRadar(Tk.Tk):
 
     def anim_init(self):
         """Initial plot state"""
-        #self.ax.set_ylim(0, self.yhigh)
         for line, point in zip(self.lines, self.points):
             line.set_data([], [])
             point.set_data([], [])
@@ -295,15 +321,15 @@ class L2pRadar(Tk.Tk):
             line[0].set_data([], [])
         return (self.lines + self.tel_line + self.sun_line + 
                 self.points + self.heos  + self.sunav_line)
-        
+
     def animate(self, i):
-        """Matplotlib animation function
-        """
+        """Matplotlib animation function"""
         # Grab data via TCP/IP normally...
         if not self.replay:
             lines = dump_queue(self.planeQueue)
             planeLines, telLines = self.process_lines(lines, 
-                                            print_output=True, dump=self.dump2file)
+                                                      print_output=True,
+                                                      dump=self.dump2file)
             self.P = addPlanes(planeLines, self.P, minel=10)
         # or read data from dump.out if requested
         elif self.replay:
@@ -311,8 +337,8 @@ class L2pRadar(Tk.Tk):
                                 dataFakeRead(self.datafile, self.pos).next())
             self.P = addPlanes(planeLines, self.P, minel=1)
         
-        # Az/El from last 15 planes present in the dictionary, grabbing 
-        # only the last 60 positions available
+        # Az/El from last 15 planes present in the dictionary, 
+        # grabbing only the last 60 positions available
         x = [p.az[-60:] for p in self.P.values()[:15]]
         y = [p.el[-60:] for p in self.P.values()[:15]]
         colours = ((p.el[-1] + 5) / 100 for p in self.P.values())
@@ -378,6 +404,18 @@ class L2pRadar(Tk.Tk):
                 self.points +  self.heos + self.sunav_line)
     
     def process_lines(self, lines, print_output=True, dump=False):
+        """Processes data lines according to length
+        
+        Parameters
+        ----------
+        lines: list of data lines
+        print_output: boolean flag to request printed output
+        dump: boolean flag to request written output
+        
+        Returns
+        -------
+        plines, tlines: lists containing plane and telescope lines
+        """
         tlines, plines = [], []
         for line in lines:
             if print_output is True:
@@ -392,7 +430,7 @@ class L2pRadar(Tk.Tk):
         return plines, tlines
     
     def run(self, newcon=False):
-        """Matplotlib animation loop"""
+        """Start subprocesses and Matplotlib animation loop"""
         if self.appRunning is True:
             return
         self.appRunning = True
@@ -407,8 +445,8 @@ class L2pRadar(Tk.Tk):
                init_func=self.anim_init, blit=True, interval=1000)
 
     def close(self):
-        """Closes GUI application and worker subprocess"""
-        if self.replay is False:
+        """Closes application and worker subprocess as appropriate"""
+        if not self.replay:
             self.procWorker.terminate()
             self.planeQueue.close()
         self.root.destroy()
@@ -417,8 +455,7 @@ class L2pRadar(Tk.Tk):
 
 
 def receive_proc(planeQueue):
-    """Requests one data line from l2planes and sends it to the queue.
-    """
+    """Requests data lines from l2planes and sends it to the queue"""
     connSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     connSocket.connect(('193.61.194.29', 2020))
 
@@ -440,9 +477,8 @@ def receive_proc(planeQueue):
 
 
 def dump_queue(planeQueue):
-    """Retrieves all the data lines from the queue."""
+    """Retrieves all the data lines from the queue"""
     lines = []
-    #print('Queue size: {}'.format(self.planeQueue.qsize())),
     while True:
         lines.append(planeQueue.get())
         if planeQueue.qsize() == 0:
@@ -451,23 +487,26 @@ def dump_queue(planeQueue):
 
 
 def main(argv=None):
+    """Deal with command line arguments and launch the program"""
     parser = argparse.ArgumentParser(description='listen2planes display client')
     group = parser.add_mutually_exclusive_group()
-    group.add_argument('-r', '--replay', help='Replay plane data from specified file')
-    group.add_argument('-d', '--dump2file', help='Write collected data to file')
+    group.add_argument('-r', '--replay', help='Replay plane data from file')
+    group.add_argument('-d', '--dump2file', help='Write plane data to file')
     args = parser.parse_args()
     
-    # Some house keeping with a hammer for linux systems
-    if (sys.platform == 'linux') or (sys.platform == 'linux2'):
-        p = subprocess.Popen(['ps', 'aux'], stdout=subprocess.PIPE)
-        ps, err = p.communicate()
-        ps = ps.splitlines()
-        lines = [l for l in ps if l.find('l2pGUI.py') != -1]
-        pids = [l.split()[1] for l in lines]
-        pids = pids[:-3]
-        for pid in pids:
-            subprocess.call(['kill', pid])
-    # Start now
+    # Some house keeping with a hammer for linux systems.
+    # Not needed anymore since we're properly terminating child processes.
+    # Left here just in case.
+    #if (sys.platform == 'linux') or (sys.platform == 'linux2'):
+        #p = subprocess.Popen(['ps', 'aux'], stdout=subprocess.PIPE)
+        #ps, err = p.communicate()
+        #ps = ps.splitlines()
+        #lines = [l for l in ps if l.find('l2pGUI.py') != -1]
+        #pids = [l.split()[1] for l in lines]
+        #pids = pids[:-3]
+        #for pid in pids:
+            #subprocess.call(['kill', pid])
+    
     app = L2pRadar(replay=args.replay, dump2file=args.dump2file)
     app.mainloop()
     
