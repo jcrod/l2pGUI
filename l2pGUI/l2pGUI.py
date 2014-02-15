@@ -22,7 +22,7 @@ import noaasun
 #import satpar as sp
 
 
-def dataFakeRead(f, init_pos=None, N_lines=80):
+def dataFakeRead(f, init_pos=None, N_lines=80, print_lines=False):
     """Reads lines from file from specified position to end.
     
     Let f be a saved l2planes output; calling this function at 
@@ -46,6 +46,8 @@ def dataFakeRead(f, init_pos=None, N_lines=80):
     i = 0
     while True:
         line = f.readline()
+        if print_lines:
+            print('{}\n'.format(line))
         if not line:
             print 'EOF ' + '%d lines read' % i
             pos = f.tell()
@@ -57,7 +59,6 @@ def dataFakeRead(f, init_pos=None, N_lines=80):
             tlines.append(line)
         i += 1
         if i > N_lines:
-            #print line
             break
     pos = f.tell()
     yield plines, tlines, pos
@@ -191,11 +192,13 @@ class L2pRadar(Tk.Tk):
             to this file will be displayed
     dump2file: if True, collected data will be written to a file
     """
-    def __init__(self, replay=None, dump2file=False):
+    def __init__(self, replay=None, dump2file=None, print_lines=None, Tstep=1000):
         Tk.Tk.__init__(self)
         self.replay = replay
         self.dump2file = dump2file
-        self.MaxPlanes = 15
+        self.print_lines = print_lines
+        self.Tstep = Tstep
+        self.MaxPlanes = 25
         self.tmpath = os.path.expanduser('~/.plotsched_tmp')
         self.visHEO = False
         self.P = {}
@@ -232,6 +235,8 @@ class L2pRadar(Tk.Tk):
         else:
             self.setFig()
             self.run(newcon=True)
+            if self.dump2file:
+                self.outFile = open(self.dump2file, 'w')
 
     def setFig(self):
         """Sets figure up"""
@@ -263,7 +268,6 @@ class L2pRadar(Tk.Tk):
         self.heos = self.ax.plot([], [], 'o', color='red')
     
         self.time = time.time()
-        self.Nplanes = 50
     
     def plotLimitUp(self):
         """Decrease plot elevation range"""
@@ -352,8 +356,9 @@ class L2pRadar(Tk.Tk):
                               plane.az[-1] * 180 / np.pi, plane.el[-1],
                               plane.lon[-1], plane.lat[-1],
                               plane.alt[-1], plane.ran[-1]))
+        print('')
             
-    def process_lines(self, data_lines, print_output=True, dump=False):
+    def process_lines(self, data_lines, print_lines=False, dump2file=False):
         """Processes data lines according to length
         
         Parameters
@@ -368,10 +373,10 @@ class L2pRadar(Tk.Tk):
         """
         tlines, plines = [], []
         for line in data_lines:
-            if print_output is True:
-                print line + '\n'
-            if dump is True:
-                self.fdump.write(line + ' \n')
+            if print_lines is True:
+                print('{}\n'.format(line))
+            if dump2file:
+                self.outFile.write(line + ' \n')
             L = len(line.split())
             if L == 13:
                 plines.append(line)
@@ -385,13 +390,14 @@ class L2pRadar(Tk.Tk):
         if not self.replay:
             data_lines = dump_queue(self.planeQueue)
             planeLines, telLines = self.process_lines(data_lines, 
-                                                      print_output=False,
-                                                      dump=self.dump2file)
-            self.P = addPlanes(planeLines, self.P, minel=5, time_alive=15)
+                                                  print_lines=self.print_lines,
+                                                  dump2file=self.dump2file)
+            self.P = addPlanes(planeLines, self.P, minel=0, time_alive=15)
         # or read data from dump.out if requested
         elif self.replay:
             planeLines, telLines, self.pos = (
-                                dataFakeRead(self.datafile, self.pos).next())
+                             dataFakeRead(self.datafile, self.pos,
+                                          print_lines=self.print_lines).next())
             self.P = addPlanes(planeLines, self.P, minel=0, time_alive=15)
         
         if len(telLines) > 0:
@@ -405,20 +411,16 @@ class L2pRadar(Tk.Tk):
         NB here 'lines' refers to plot lines, not data lines
         """
         self.updateData()
-        #self.formattedOutput()
-        
-        #newtime = time.time()
-        #print('FPS: {:4.1f}'.format(1 / (newtime - self.time)))
-        #self.time = newtime
-        
-        # Az/El from first 30 planes present in the dictionary, 
-        # grabbing only the last 100 positions available in chunks of 10
-        x = [p.az[-100::10] for p in self.P.values()]
-        y = [p.el[-100::10] for p in self.P.values()]
+        if not self.print_lines:
+            self.formattedOutput()
+
+        # Az/El from planes present in the dictionary, grabbing only 
+        # the last 80 positions available in steps of 5
+        x = [p.az[-80::5] for p in self.P.values()]
+        y = [p.el[-80::5] for p in self.P.values()]
         
         colours = ((p.el[-1] + 5) / 100 for p in self.P.values() if len(p.el) > 0)
         Nplanes = len(x)
-        self.Nplanes = Nplanes
         if Nplanes > 0:
             # Update plot lines with Az/El data
             for j, (line, point) in enumerate(zip(self.lines, self.points)):
@@ -426,7 +428,7 @@ class L2pRadar(Tk.Tk):
                 line.set_color(cm.jet(colours.next()))
                 point.set_data(x[j][-1], self.el2zdist(y[j][-1]))
                 if j == Nplanes - 1:
-                    # Make sure previous plot lines are reset
+                    # Reset plot lines from previous planes
                     for line, point in (
                             zip(self.lines[Nplanes:], self.points[Nplanes:])):
                         line.set_data([], [])
@@ -443,7 +445,6 @@ class L2pRadar(Tk.Tk):
             
         # Telescope position
         # 56692  41847.094 telscp  75.00  65.00 1
-        
         telPos = self.telLines.split()[3:5]
         telAz = float(telPos[0]) * np.pi / 180
         telEl = float(telPos[1][:4])
@@ -458,9 +459,9 @@ class L2pRadar(Tk.Tk):
                 d, JD = noaasun.parseDates(mode='now')
                 sunAz, sunEl = noaasun.sunpos(JD)
             else:
-                # Read MJD from planes data
+                # Read MJD from data so that the Sun is in the right place
                 if len(self.P) > 0:
-                    # Update it if planes found
+                    # Update last date if planes found
                     self.last_mjd = (self.P.values()[0].mjd[-1] + 
                                  self.P.values()[0].epc[-1] / 86400)
                 sunAz, sunEl = noaasun.sunpos(JD=2400000.5 + self.last_mjd)
@@ -494,7 +495,7 @@ class L2pRadar(Tk.Tk):
             self.procWorker.start()
             
         self.anim = animation.FuncAnimation(self.fig1, self.animate,
-               init_func=self.anim_init, blit=True, interval=1000)
+               init_func=self.anim_init, blit=True, interval=self.Tstep)
 
     def close(self):
         """Closes application and worker subprocess as appropriate"""
@@ -532,7 +533,7 @@ def dump_queue(planeQueue):
     """Retrieves all the data lines from the queue"""
     data_lines = []
     while True:
-        lines.append(planeQueue.get())
+        data_lines.append(planeQueue.get())
         if planeQueue.qsize() == 0:
             break
     return data_lines
@@ -544,6 +545,10 @@ def main(argv=None):
     group = parser.add_mutually_exclusive_group()
     group.add_argument('-r', '--replay', help='Replay plane data from file')
     group.add_argument('-d', '--dump2file', help='Write plane data to file')
+    parser.add_argument('-pl', '--print-lines', action='store_true',
+                        help='Print data lines')
+    parser.add_argument('-t', '--time-step', type=int, default=1000,
+                        help='Time in milliseconds between animation steps')
     args = parser.parse_args()
     
     # Some house keeping with a hammer for linux systems.
@@ -559,7 +564,10 @@ def main(argv=None):
         #for pid in pids:
             #subprocess.call(['kill', pid])
     
-    app = L2pRadar(replay=args.replay, dump2file=args.dump2file)
+    app = L2pRadar(replay=args.replay, 
+                   dump2file=args.dump2file, 
+                   print_lines=args.print_lines,
+                   Tstep=args.time_step)
     app.mainloop()
     
     
