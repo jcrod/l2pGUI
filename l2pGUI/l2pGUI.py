@@ -22,7 +22,7 @@ import noaasun
 #import satpar as sp
 
 
-def dataFakeRead(f, init_pos=None, N_lines=30):
+def dataFakeRead(f, init_pos=None, N_lines=80):
     """Reads lines from file from specified position to end.
     
     Let f be a saved l2planes output; calling this function at 
@@ -57,7 +57,7 @@ def dataFakeRead(f, init_pos=None, N_lines=30):
             tlines.append(line)
         i += 1
         if i > N_lines:
-            print line
+            #print line
             break
     pos = f.tell()
     yield plines, tlines, pos
@@ -133,7 +133,7 @@ class Plane():
             self.maxel = self.el[-1] if self.el[-1] > self.maxel else self.maxel
 
 
-def addPlanes(planeLines, planes_dict, minel=15, time_alive=15):
+def addPlanes(planeLines, planes_dict, minel=-5, time_alive=-1):
     """Processes plane data lines and updates planes dictionary accordingly.
     
     Parameters
@@ -143,30 +143,42 @@ def addPlanes(planeLines, planes_dict, minel=15, time_alive=15):
                  keys: plane id; values: Plane instances
     minel: elevation cutoff
     time_alive: seconds to wait before discarding planes for which
-                no beacons have been received 
+                no beacons have been received. No limit if set to negative
     """
     P = planes_dict
     for line in planeLines:
         l = line.split()
         plane_id = l[2]
-        if not P.has_key(plane_id):
-            P[plane_id] = Plane(line, minel)
-        else:
-            P[plane_id].addLine(l)
+        el = float(l[9])
+        if el > minel:
+            if not P.has_key(plane_id):
+                P[plane_id] = Plane(line, minel)
+            else:
+                P[plane_id].addLine(l)
 
-    lenP_init = len(P)
     if len(P) == 0 or len(planeLines) == 0:
         return P
-    # Remove planes with no epochs (below elevation cutoff) and those
-    # for which no beacons have been received for more than given time
-    keys1 = {k for k,v in P.iteritems() if len(v.epc) == 0}
-    last_epoch = float(l[1])
-    keys2 = {k for k,v in P.iteritems() if 
-                                 abs(last_epoch - v.last_epoch) > time_alive}
-    keys_to_remove = keys1.union(keys2)
-    for key in list(keys_to_remove):
-        del P[key]
-    print 'len(P): {} {} (-{})'.format(lenP_init, len(P), len(keys_to_remove))
+    # Remove planes for which no beacons have been 
+    # received for more than given time
+    if time_alive >= 0:
+        last_epoch = float(l[1])
+        keys = [k for k,v in P.iteritems() if 
+                                 abs(last_epoch - v.last_epoch) > time_alive]
+        for key in keys:
+            del P[key]
+    return P
+
+
+def loadPlanesFile(fname, minel=-5):
+    t0 = time.time()
+    with open(fname, 'r') as f:
+        P = {}
+        for line in f:
+            if len(line.split()) < 13:
+                continue
+            P = addPlanes((line,), P, minel=-5)
+    t = time.time() - t0
+    print('{} planes loaded in {:<4.2f} seconds'.format(len(P), t))
     return P
 
 
@@ -183,21 +195,23 @@ class L2pRadar(Tk.Tk):
         Tk.Tk.__init__(self)
         self.replay = replay
         self.dump2file = dump2file
-        self.root = Tk.Tk._root(self)
-        self.root.configure(background='black')
-        self.root.title('l2pGUI')
-        self.l2p_HOST = '193.61.194.29'
+        self.MaxPlanes = 15
         self.tmpath = os.path.expanduser('~/.plotsched_tmp')
         self.visHEO = False
         self.P = {}
+        self.last_mjd = 0
+        
+        self.root = Tk.Tk._root(self)
+        self.root.configure(background='black')
+        self.root.title('l2pGUI')
         self.frameCtrls = Tk.Frame()
         self.frameCtrls.pack(side='left')
         self.buttonLimitUp = Tk.Button(self.frameCtrls, text='Up',
-                             command=self.plotLimitUp, bg='grey')
+                                       command=self.plotLimitUp, bg='grey')
         self.buttonLimitDown = Tk.Button(self.frameCtrls, text='Dn',
-                               command=self.plotLimitDown, bg='grey')
+                                         command=self.plotLimitDown, bg='grey')
         self.buttonRotate = Tk.Button(self.frameCtrls, text='Rot',
-                               command=self.plotRotate, bg='grey')
+                                      command=self.plotRotate, bg='grey')
         self.buttonHEO = Tk.Button(self.frameCtrls, text='HEO',
                                    command=self.displayHEO, bg='grey')
         self.buttonLimitUp.pack(side='top', fill=Tk.X, pady=2)
@@ -237,9 +251,9 @@ class L2pRadar(Tk.Tk):
         for label in self.ax.get_xticklabels() + self.ax.get_yticklabels():
             label.set_color('white')
         self.lines = sum((self.ax.plot([], [], lw=4, markeredgewidth=0)
-                          for n in range(15)), [])
+                          for n in range(self.MaxPlanes)), [])
         self.points = sum((self.ax.plot([], [], 'o', markeredgewidth=0, 
-                           ms=6, color='w') for n in range(15)), [])
+                          ms=6, color='w') for n in range(self.MaxPlanes)), [])
         self.tel_line = self.ax.plot([], [], 'o', color='#00ff00', ms=10)
         self.sun_line = self.ax.plot([], [], 'o', color='gold',
                                      ms=25, alpha=0.8)
@@ -247,6 +261,9 @@ class L2pRadar(Tk.Tk):
         self.yhigh = 90
         self.ax.set_ylim(0, self.yhigh)
         self.heos = self.ax.plot([], [], 'o', color='red')
+    
+        self.time = time.time()
+        self.Nplanes = 50
     
     def plotLimitUp(self):
         """Decrease plot elevation range"""
@@ -370,34 +387,46 @@ class L2pRadar(Tk.Tk):
             planeLines, telLines = self.process_lines(data_lines, 
                                                       print_output=False,
                                                       dump=self.dump2file)
-            self.P = addPlanes(planeLines, self.P, minel=10)
+            self.P = addPlanes(planeLines, self.P, minel=5, time_alive=15)
         # or read data from dump.out if requested
         elif self.replay:
             planeLines, telLines, self.pos = (
                                 dataFakeRead(self.datafile, self.pos).next())
-            self.P = addPlanes(planeLines, self.P, minel=1)
-        self.telLines = telLines[-1]
+            self.P = addPlanes(planeLines, self.P, minel=0, time_alive=15)
+        
+        if len(telLines) > 0:
+            self.telLines = telLines[-1]
+        else:
+            self.telLines = '0 0 0 00.00 00.00 0'
         
     def animate(self, i):
         """Matplotlib animation function
         
-        NB Here 'lines' refers to plot lines, not data lines
+        NB here 'lines' refers to plot lines, not data lines
         """
         self.updateData()
-        self.formattedOutput()
+        #self.formattedOutput()
+        
+        #newtime = time.time()
+        #print('FPS: {:4.1f}'.format(1 / (newtime - self.time)))
+        #self.time = newtime
         
         # Az/El from first 30 planes present in the dictionary, 
-        # grabbing only the last 60 positions available
-        x = [p.az[-60:] for p in self.P.values()[:30]]
-        y = [p.el[-60:] for p in self.P.values()[:30]]
-        colours = ((p.el[-1] + 5) / 100 for p in self.P.values())
+        # grabbing only the last 100 positions available in chunks of 10
+        x = [p.az[-100::10] for p in self.P.values()]
+        y = [p.el[-100::10] for p in self.P.values()]
+        
+        colours = ((p.el[-1] + 5) / 100 for p in self.P.values() if len(p.el) > 0)
         Nplanes = len(x)
+        self.Nplanes = Nplanes
         if Nplanes > 0:
+            # Update plot lines with Az/El data
             for j, (line, point) in enumerate(zip(self.lines, self.points)):
                 line.set_data(x[j], map(self.el2zdist, (y[j])))
                 line.set_color(cm.jet(colours.next()))
                 point.set_data(x[j][-1], self.el2zdist(y[j][-1]))
                 if j == Nplanes - 1:
+                    # Make sure previous plot lines are reset
                     for line, point in (
                             zip(self.lines[Nplanes:], self.points[Nplanes:])):
                         line.set_data([], [])
@@ -414,19 +443,27 @@ class L2pRadar(Tk.Tk):
             
         # Telescope position
         # 56692  41847.094 telscp  75.00  65.00 1
+        
         telPos = self.telLines.split()[3:5]
         telAz = float(telPos[0]) * np.pi / 180
         telEl = float(telPos[1][:4])
         self.tel_line[0].set_data(telAz, 90 - telEl)
         
-        # Update Sun position every 10 animation steps
-        if i % 10 == 0:
-            if self.replay:
-                mjd = self.P.values()[0].mjd[-1] + self.P.values()[0].epc[-1] / 86400
-                sunAz, sunEl = noaasun.sunpos(JD=2400000.5 + mjd)
-            else:
+        # Update Sun position every 20 animation steps
+        if i % 20 == 0:
+            #newtime = time.time()
+            #print('\nFPS: {:4.1f}\n'.format(20 / (newtime - self.time)))
+            #self.time = newtime
+            if not self.replay:
                 d, JD = noaasun.parseDates(mode='now')
                 sunAz, sunEl = noaasun.sunpos(JD)
+            else:
+                # Read MJD from planes data
+                if len(self.P) > 0:
+                    # Update it if planes found
+                    self.last_mjd = (self.P.values()[0].mjd[-1] + 
+                                 self.P.values()[0].epc[-1] / 86400)
+                sunAz, sunEl = noaasun.sunpos(JD=2400000.5 + self.last_mjd)
                 
             sunAz = sunAz * np.pi / 180
             self.sun_line[0].set_data(sunAz, 90 - sunEl)

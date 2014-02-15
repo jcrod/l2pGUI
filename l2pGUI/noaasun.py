@@ -12,7 +12,7 @@ import string
 import datetime as dt
 import numpy as np
 import argparse
-import coords as cd
+import coords as cds
 
 D2R = np.pi / 180
 R2D = 180 / np.pi
@@ -204,17 +204,17 @@ def parseDates(date=None, mode='mjd'):
         except ValueError, error:
             print('Could not parse date: {}'.format(error))
             sys.exit()
-        fd = cd.hms2s(d.hour, d.minute, d.second) / 86400.
-        JD = cd.gcal2jd(d.year, d.month, d.day) + fd
+        fd = cds.hms2s(d.hour, d.minute, d.second) / 86400.
+        JD = cds.gcal2jd(d.year, d.month, d.day) + fd
     elif mode == 'mjd':
-        iy, im, iday, fd = cd.jd2gcal(2400000.5 + date)
-        ih, imin, iss = cd.s2hms(fd * 86400)
+        iy, im, iday, fd = cds.jd2gcal(2400000.5 + date)
+        ih, imin, iss = cds.s2hms(fd * 86400)
         d = dt.datetime(*[int(n) for n in (iy, im, iday, ih, imin, iss)])
         JD = 2400000.5 + date
     elif mode == 'now':
         d = dt.datetime.utcnow()
-        fd = cd.hms2s(d.hour, d.minute, d.second) / 86400.    
-        JD = cd.gcal2jd(d.year, d.month, d.day) + fd
+        fd = cds.hms2s(d.hour, d.minute, d.second) / 86400.    
+        JD = cds.gcal2jd(d.year, d.month, d.day) + fd
     return d, JD
 
 
@@ -260,23 +260,23 @@ def main(date=None):
     print(date_str).format(iy, im, iday, ih, imin, iss),
     print '=' * 6 + '\n'
     print('   Azimuth/Elevation: {:6.2f} {:6.2f}').format(azsun, elsun)
-    pretty_print('Sunlight duration', *cd.s2hms(sunldur * 60))
+    pretty_print('Sunlight duration', *cds.s2hms(sunldur * 60))
     print '   ' + '-' * 33
     if not np.isnan(at0):
-        pretty_print('Astronomical twilight', *cd.s2hms(86400 * at0))
+        pretty_print('Astronomical twilight', *cds.s2hms(86400 * at0))
     else:
         print '   No astronomical twilight'
-    pretty_print('Nautical twilight', *cd.s2hms(86400 * nt0))
-    pretty_print('Civil twilight', *cd.s2hms(86400 * ct0))
+    pretty_print('Nautical twilight', *cds.s2hms(86400 * nt0))
+    pretty_print('Civil twilight', *cds.s2hms(86400 * ct0))
     print '   ' + '-' * 33
-    pretty_print('Sunrise', *cd.s2hms(86400 * sunrise))
-    pretty_print('Solar noon', *cd.s2hms(86400 * solnoon))
-    pretty_print('Sunset', *cd.s2hms(86400 * sunset))
+    pretty_print('Sunrise', *cds.s2hms(86400 * sunrise))
+    pretty_print('Solar noon', *cds.s2hms(86400 * solnoon))
+    pretty_print('Sunset', *cds.s2hms(86400 * sunset))
     print '   ' + '-' * 33
-    pretty_print('Civil twilight', *cd.s2hms(86400 * ct1))
-    pretty_print('Nautical twilight', *cd.s2hms(86400 * nt1))    
+    pretty_print('Civil twilight', *cds.s2hms(86400 * ct1))
+    pretty_print('Nautical twilight', *cds.s2hms(86400 * nt1))    
     if not np.isnan(at1):
-        pretty_print('Astronomical twilight', *cd.s2hms(86400 * at1))
+        pretty_print('Astronomical twilight', *cds.s2hms(86400 * at1))
     else:
         print '   No astronomical twilight'
     print '\n'
