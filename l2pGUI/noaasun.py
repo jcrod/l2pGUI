@@ -180,7 +180,7 @@ def refr_corr(elsun):
     return c    
     
 
-def sunpos(JD, Lon=0.3361, lat=50.8674):
+def sunpos(JD, lon=0.3361, lat=50.8674):
     '''Returns Sun's azimuth and elevation at specified epoch and location
     '''
     sun_radec, eq_time = sunradeceqtime(JD)

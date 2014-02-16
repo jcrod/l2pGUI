@@ -480,7 +480,7 @@ class L2pRadar(Tk.Tk):
                     # Update last date if planes found
                     self.last_mjd = (self.P.values()[0].mjd[-1] + 
                                  self.P.values()[0].epc[-1] / 86400)
-                sunAz, sunEl = noaasun.sunpos(JD=2400000.5 + self.last_mjd
+                sunAz, sunEl = noaasun.sunpos(JD=2400000.5 + self.last_mjd,
                                               lon=LON, lat=LAT)
                 
             sunAz = sunAz * np.pi / 180
