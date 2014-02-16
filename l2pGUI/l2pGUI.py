@@ -22,7 +22,12 @@ import noaasun
 #import satpar as sp
 
 
-def dataFakeRead(f, init_pos=None, N_lines=80, print_lines=False):
+L2P_HOST = ('193.61.194.29', 2020)
+LON = 0.3361
+LAT = 50.8674
+
+
+def dataFakeRead(f, init_pos=None, N_lines=140, print_lines=False):
     """Reads lines from file from specified position to end.
     
     Let f be a saved l2planes output; calling this function at 
@@ -62,6 +67,30 @@ def dataFakeRead(f, init_pos=None, N_lines=80, print_lines=False):
             break
     pos = f.tell()
     yield plines, tlines, pos
+
+
+def loadPlanesFile(fname, minel=-5):
+    """Loads planes data from file. Useful for analysis.
+    
+    Parameters
+    ----------
+    fname: l2planes dump file
+    minel: elevation cutoff
+    
+    Returns
+    -------
+    P: dictionary containing Plane instances
+    """
+    t0 = time.time()
+    with open(fname, 'r') as f:
+        P = {}
+        for line in f:
+            if len(line.split()) < 13:
+                continue
+            P = addPlanes((line,), P, minel=-5)
+    t = time.time() - t0
+    print('{} planes loaded in {:<4.2f} seconds'.format(len(P), t))
+    return P
 
     
 def colourMaplimits(value_limits=(0, 80), colourmap_limits=(0.05, 0.85)):
@@ -167,19 +196,6 @@ def addPlanes(planeLines, planes_dict, minel=-5, time_alive=-1):
                                  abs(last_epoch - v.last_epoch) > time_alive]
         for key in keys:
             del P[key]
-    return P
-
-
-def loadPlanesFile(fname, minel=-5):
-    t0 = time.time()
-    with open(fname, 'r') as f:
-        P = {}
-        for line in f:
-            if len(line.split()) < 13:
-                continue
-            P = addPlanes((line,), P, minel=-5)
-    t = time.time() - t0
-    print('{} planes loaded in {:<4.2f} seconds'.format(len(P), t))
     return P
 
 
@@ -416,17 +432,17 @@ class L2pRadar(Tk.Tk):
 
         # Az/El from planes present in the dictionary, grabbing only 
         # the last 80 positions available in steps of 5
-        x = [p.az[-80::5] for p in self.P.values()]
-        y = [p.el[-80::5] for p in self.P.values()]
+        Azs = [p.az[-80::5] for p in self.P.values()]
+        Els = [p.el[-80::5] for p in self.P.values()]
         
         colours = ((p.el[-1] + 5) / 100 for p in self.P.values() if len(p.el) > 0)
-        Nplanes = len(x)
+        Nplanes = len(Azs)
         if Nplanes > 0:
             # Update plot lines with Az/El data
             for j, (line, point) in enumerate(zip(self.lines, self.points)):
-                line.set_data(x[j], map(self.el2zdist, (y[j])))
+                line.set_data(Azs[j], map(self.el2zdist, (Els[j])))
                 line.set_color(cm.jet(colours.next()))
-                point.set_data(x[j][-1], self.el2zdist(y[j][-1]))
+                point.set_data(Azs[j][-1], self.el2zdist(Els[j][-1]))
                 if j == Nplanes - 1:
                     # Reset plot lines from previous planes
                     for line, point in (
@@ -457,14 +473,15 @@ class L2pRadar(Tk.Tk):
             #self.time = newtime
             if not self.replay:
                 d, JD = noaasun.parseDates(mode='now')
-                sunAz, sunEl = noaasun.sunpos(JD)
+                sunAz, sunEl = noaasun.sunpos(JD, lon=LON, lat=LAT)
             else:
                 # Read MJD from data so that the Sun is in the right place
                 if len(self.P) > 0:
                     # Update last date if planes found
                     self.last_mjd = (self.P.values()[0].mjd[-1] + 
                                  self.P.values()[0].epc[-1] / 86400)
-                sunAz, sunEl = noaasun.sunpos(JD=2400000.5 + self.last_mjd)
+                sunAz, sunEl = noaasun.sunpos(JD=2400000.5 + self.last_mjd
+                                              lon=LON, lat=LAT)
                 
             sunAz = sunAz * np.pi / 180
             self.sun_line[0].set_data(sunAz, 90 - sunEl)
@@ -502,6 +519,8 @@ class L2pRadar(Tk.Tk):
         if not self.replay:
             self.procWorker.terminate()
             self.planeQueue.close()
+        if self.dump2file:
+            self.outFile.close()
         self.root.destroy()
         print '\nExiting...\n'
         sys.exit()
@@ -510,7 +529,7 @@ class L2pRadar(Tk.Tk):
 def receive_proc(planeQueue):
     """Requests data lines from l2planes and sends it to the queue"""
     connSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    connSocket.connect(('193.61.194.29', 2020))
+    connSocket.connect(L2P_HOST)
 
     while True:
         # Send string expected by listen2planes from clients
