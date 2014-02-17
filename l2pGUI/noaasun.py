@@ -122,18 +122,25 @@ def sunradec2azel(sde, eqtime, JD, TZ=0, lon=0.3361, lat=50.8674):
     
     # Solar noon, sunrise and sunset (LST, local sidereal time)
     Solnoon = (720 - 4*lon - eqtime + TZ*60) / 1440
-    Sunrise = Solnoon - HAsunr * 4 / 1440
-    Sunset = Solnoon + HAsunr * 4 / 1440
-    Civtw0 = Solnoon - HAcivt * 4 / 1440
-    Civtw1 = Solnoon + HAcivt * 4 / 1440
-    Nautw0 = Solnoon - HAnaut * 4 / 1440
-    Nautw1 = Solnoon + HAnaut * 4 / 1440
-    Asttw0 = Solnoon - HAastr * 4 / 1440
-    Asttw1 = Solnoon + HAastr * 4 / 1440
+
+    keys = ['Srise', 'Sset', 'Ctw0', 'Ctw1', 'Ntw0', 'Ntw1', 'Atw0', 'Atw1']
+    Stimes = {k: 0 for k in keys}
+    Stimes['Solnoon'] = Solnoon
     
+    Stimes['Srise'] = Solnoon - HAsunr * 4 / 1440
+    Stimes['Sset'] = Solnoon + HAsunr * 4 / 1440
+    Stimes['Ctw0'] = Solnoon - HAcivt * 4 / 1440
+    Stimes['Ctw1'] = Solnoon + HAcivt * 4 / 1440
+    Stimes['Ntw0'] = Solnoon - HAnaut * 4 / 1440
+    Stimes['Ntw1'] = Solnoon + HAnaut * 4 / 1440
+    Stimes['Atw0'] = Solnoon - HAastr * 4 / 1440
+    Stimes['Atw1'] = Solnoon + HAastr * 4 / 1440
     
+    for k in ['Srise', 'Ctw0', 'Ntw0', 'Atw0']:
+        if Stimes[k] < 0: Stimes[k] += 1
+
     # Sunlight duration (minutes)
-    Sunldur = 8*HAsunr
+    Stimes['Sunldur'] = 8 * HAsunr
     
     # True solar time (min)
     trueSolt = 1440*t + eqtime + 4*lon - 60*TZ % 1440
@@ -158,8 +165,8 @@ def sunradec2azel(sde, eqtime, JD, TZ=0, lon=0.3361, lat=50.8674):
         azsun = (540 - R2D * (math.acos(((math.sin(D2R * lat) *
                 math.cos(D2R * za)) - math.sin(D2R * sde)) /
                 (math.cos(D2R * lat) * math.sin(D2R * za))))) % 360
-    return (azsun, elsun), (Sunrise, Solnoon, Sunset, Sunldur,
-            Civtw0, Civtw1, Nautw0, Nautw1, Asttw0, Asttw1)
+
+    return (azsun, elsun), Stimes
 
 
 def refr_corr(elsun):
@@ -180,23 +187,23 @@ def refr_corr(elsun):
     return c    
     
 
-def sunpos(JD, lon=0.3361, lat=50.8674):
+def sunpos(JD, lon=0.3361, lat=50.8674, TZ=0):
     '''Returns Sun's azimuth and elevation at specified epoch and location
     '''
     sun_radec, eq_time = sunradeceqtime(JD)
     (azsun, elsun), suntimes = sunradec2azel(sun_radec[1], eq_time, JD,
-                                             lon=lon, lat=lat)
+                                             lon=lon, lat=lat, TZ=TZ)
     elsun = elsun + refr_corr(elsun)
     return azsun, elsun
 
 
-def sunpos_and_times(JD, lon=0.3361, lat=50.8674):
+def sunpos_and_times(JD, lon=0.3361, lat=50.8674, TZ=0):
     '''Returns Sun's azimuth and elevation at specified epoch and location 
     and sunrise, sunset and twilight times.
     '''
     sun_radec, eq_time = sunradeceqtime(JD)
     (azsun, elsun), suntimes = sunradec2azel(sun_radec[1], eq_time, JD,
-                                             lon=lon, lat=lat)
+                                             lon=lon, lat=lat, TZ=TZ)
     elsun = elsun + refr_corr(elsun)
     return (azsun, elsun), suntimes
 
@@ -251,6 +258,8 @@ def main(date=None):
                         help='Longitude of observing station', type=float)
     parser.add_argument('-lat', '--latitude', 
                         help='latitude of observing station', type=float)
+    parser.add_argument('-tz', '--time-zone', type=int, default=0,
+                        help='Time zone')
     args = parser.parse_args()
     
     if args.gregorian:
@@ -268,26 +277,25 @@ def main(date=None):
     
     Lon = 0.3361 if not args.longitude else args.longitude
     Lat = 50.8674 if not args.latitude else args.latitude
+    TZ = args.time_zone
     
-    (azsun, elsun), suntimes = sunpos_and_times(JD, lon=Lon, lat=Lat)
-    (sunrise, solnoon, sunset, sunldur, 
-          ct0, ct1, nt0, nt1, at0, at1) = suntimes
+    (azsun, elsun), stimes = sunpos_and_times(JD, lon=Lon, lat=Lat, TZ=TZ)
     
     print(d.strftime('\n   ===== %Y-%m-%d %H:%M:%S =====\n'))
     print('   Azimuth/Elevation: {:6.2f} {:6.2f}').format(azsun, elsun)
-    pretty_print('Sunlight duration', *jd.s2hms(sunldur * 60))
+    pretty_print('Sunlight duration', *jd.s2hms(stimes['Sunldur'] * 60))
     print '   ' + '-' * 33
-    print_time(at0, 'Astronomical')
-    print_time(nt0, 'Nautical')
-    print_time(ct0, 'Civil')
+    print_time(stimes['Atw0'], 'Astronomical')
+    print_time(stimes['Ntw0'], 'Nautical')
+    print_time(stimes['Ctw0'], 'Civil')
     print '   ' + '-' * 33
-    pretty_print('Sunrise', *jd.s2hms(86400 * sunrise))
-    pretty_print('Solar noon', *jd.s2hms(86400 * solnoon))
-    pretty_print('Sunset', *jd.s2hms(86400 * sunset))
+    pretty_print('Sunrise', *jd.s2hms(86400 * stimes['Srise']))
+    pretty_print('Solar noon', *jd.s2hms(86400 * stimes['Solnoon']))
+    pretty_print('Sunset', *jd.s2hms(86400 * stimes['Sset']))
     print '   ' + '-' * 33
-    print_time(ct1, 'Civil')
-    print_time(nt1, 'Nautical')
-    print_time(at1, 'Astronomical')
+    print_time(stimes['Ctw1'], 'Civil')
+    print_time(stimes['Ntw1'], 'Nautical')
+    print_time(stimes['Atw1'], 'Astronomical')
     print '\n'
 
 

@@ -273,8 +273,8 @@ class L2pRadar(Tk.Tk):
             label.set_color('white')
         self.lines = sum((self.ax.plot([], [], lw=4, markeredgewidth=0)
                           for n in range(self.MaxPlanes)), [])
-        self.points = sum((self.ax.plot([], [], 'o', markeredgewidth=0, 
-                          ms=6, color='w') for n in range(self.MaxPlanes)), [])
+        self.points = self.ax.plot([], [], 'o', markeredgewidth=0, 
+                                                   ms=6, color='w')
         self.tel_line = self.ax.plot([], [], 'o', color='#00ff00', ms=10)
         self.sun_line = self.ax.plot([], [], 'o', color='gold',
                                      ms=25, alpha=0.8)
@@ -346,10 +346,12 @@ class L2pRadar(Tk.Tk):
 
     def anim_init(self):
         """Initial plot state"""
-        for line, point in zip(self.lines, self.points):
+        #for line, point in zip(self.lines, self.points):
+            #line.set_data([], [])
+            #point.set_data([], [])
+        for line in self.lines:
             line.set_data([], [])
-            point.set_data([], [])
-        for line in [self.tel_line, self.sun_line, self.heos, self.sunav_line]:
+        for line in [self.tel_line, self.sun_line, self.heos, self.sunav_line, self.points]:
             line[0].set_data([], [])
         return (self.lines + self.tel_line + self.sun_line + 
                 self.points + self.heos  + self.sunav_line)
@@ -439,20 +441,21 @@ class L2pRadar(Tk.Tk):
         Nplanes = len(Azs)
         if Nplanes > 0:
             # Update plot lines with Az/El data
-            for j, (line, point) in enumerate(zip(self.lines, self.points)):
+            for j, line in enumerate(self.lines):
                 line.set_data(Azs[j], map(self.el2zdist, (Els[j])))
                 line.set_color(cm.jet(colours.next()))
-                point.set_data(Azs[j][-1], self.el2zdist(Els[j][-1]))
                 if j == Nplanes - 1:
                     # Reset plot lines from previous planes
-                    for line, point in (
-                            zip(self.lines[Nplanes:], self.points[Nplanes:])):
+                    for line in self.lines[Nplanes:]:
                         line.set_data([], [])
-                        point.set_data([], [])
                     break
         else:
             self.lines[0].set_data([], [])
-            self.points[0].set_data([], [])
+        
+        x = [n[-1] for n in Azs]
+        y = [n[-1] for n in Els]
+        self.points[0].set_data(x, map(self.el2zdist, y))
+
         
         if (self.visHEO is True) and (i % 15 == 0):
             self.plotHEO()
