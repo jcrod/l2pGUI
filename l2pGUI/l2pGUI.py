@@ -1,5 +1,15 @@
 #!/usr/bin/env python
+'''Real-time display for ADS/B data. This application implements a client 
+for listen2planes, an application that receives data from an ADS/B box 
+and sends it via TCP/IP upon request. Data is displayed on a polar plot 
+as traces for each individual plane. It can also be used offline by reading 
+a file of collected data, which can be re-played at many times the regular 
+collection speed.
 
+The application needs to know the IP address of the l2planes server, and 
+the coordinates of the observing station for correct determination of the 
+Sun position. These can be set below.
+'''
 import sys, os
 import numpy as np
 import Tkinter as Tk
