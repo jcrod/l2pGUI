@@ -5,7 +5,8 @@ import numpy as np
 import Tkinter as Tk
 import socket
 import multiprocessing
-import subprocess
+#import subprocess
+import signal
 import argparse
 import matplotlib
 matplotlib.use('TkAgg')
@@ -499,7 +500,7 @@ class L2pRadar(Tk.Tk):
                 A = (sunAz + X * np.pi / 180)            
                 B = sunEl + Y
                 az_corr = 1 / np.cos(B * np.pi / 180)
-                A = A + (A - sunAz) * az_corr
+                A = sunAz + (A - sunAz) * az_corr
                 self.sunav_line[0].set_data(A, 90 - B)
             else:
                 self.sunav_line[0].set_data(0, 0)
@@ -517,7 +518,13 @@ class L2pRadar(Tk.Tk):
             
         self.anim = animation.FuncAnimation(self.fig1, self.animate,
                init_func=self.anim_init, blit=True, interval=self.Tstep)
+        
+        signal.signal(signal.SIGINT, self.signal_handler)
 
+    def signal_handler(self, signal, frame):
+        """Catch SIGINT and close everything properly"""
+        self.close()
+        
     def close(self):
         """Closes application and worker subprocess as appropriate"""
         if not self.replay:
