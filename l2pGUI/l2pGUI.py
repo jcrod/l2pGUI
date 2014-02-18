@@ -279,7 +279,7 @@ class L2pRadar(Tk.Tk):
         self.tel_line = self.ax.plot([], [], 'o', color='#00ff00', ms=10)
         self.sun_line = self.ax.plot([], [], 'o', color='gold',
                                      ms=25, alpha=0.8)
-        self.sunav_line = self.ax.plot([], [], color='gold', lw=2)
+        self.sunav_line = self.ax.plot([], [], color='gold', lw=2, alpha=0.8)
         self.yhigh = 90
         self.ax.set_ylim(0, self.yhigh)
         self.heos = self.ax.plot([], [], 'o', color='red')
@@ -376,6 +376,7 @@ class L2pRadar(Tk.Tk):
                               plane.lon[-1], plane.lat[-1],
                               plane.alt[-1], plane.ran[-1]))
         print('')
+        sys.stdout.flush()
             
     def process_lines(self, data_lines, print_lines=False, dump2file=False):
         """Processes data lines according to length
@@ -401,6 +402,9 @@ class L2pRadar(Tk.Tk):
                 plines.append(line)
             elif L == 6:
                 tlines.append(line)
+            elif L == 2:
+                time.sleep(2)
+                self.reconnect()
         return plines, tlines
     
     def updateData(self):
@@ -523,7 +527,17 @@ class L2pRadar(Tk.Tk):
 
     def signal_handler(self, signal, frame):
         """Catch SIGINT and close everything properly"""
+        print('CTRL-C')
         self.close()
+        
+    def reconnect(self):
+        """Try to re-establish connections"""
+        self.planeQueue.close()
+        self.planeQueue = multiprocessing.Queue()
+        self.procWorker.terminate()
+        self.procWorker = multiprocessing.Process(target=receive_proc,
+                                                      args=[self.planeQueue])
+        self.procWorker.start()
         
     def close(self):
         """Closes application and worker subprocess as appropriate"""
@@ -540,20 +554,30 @@ class L2pRadar(Tk.Tk):
 def receive_proc(planeQueue):
     """Requests data lines from l2planes and sends it to the queue"""
     connSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    connSocket.connect(L2P_HOST)
+    try:
+        connSocket.connect(L2P_HOST)
+    except socket.error, msg:
+        print('Error connecting: {}'.format(msg))
 
     while True:
         # Send string expected by listen2planes from clients
         try:
-            connSocket.send('reader')
+            connSocket.send('reader\0')
         except socket.error, msg:
-            print('Failed to receive from server: '.format(msg))
-            time.sleep(0.5)                
+            print('Failed to send to server: '.format(msg))
+            time.sleep(1.5)
+            # We will look for the following error string
+            # and attempt to reconnect if found
+            planeQueue.put('CONN ERROR')
+            break
+            
         try:
             data = connSocket.recv(256)
         except socket.error, msg:
-            print('Failed to receive from sserver: {}'.format(msg))
-            time.sleep(0.5)                
+            print('Failed to receive from server: {}'.format(msg))
+            time.sleep(1.5)
+            planeQueue.put('CONN ERROR')
+            break
         else:
             planeQueue.put(data)
     return
@@ -581,9 +605,9 @@ def main(argv=None):
                         help='Time in milliseconds between animation steps')
     args = parser.parse_args()
     
-    # Some house keeping with a hammer for linux systems.
-    # Not needed anymore since we're properly terminating child processes.
-    # Left here just in case.
+    # Some house keeping with a hammer to clean processes from previous 
+    # runs in Linux systems. Not needed anymore since we're properly 
+    # terminating child processes. Left here just in case.
     #if (sys.platform == 'linux') or (sys.platform == 'linux2'):
         #p = subprocess.Popen(['ps', 'aux'], stdout=subprocess.PIPE)
         #ps, err = p.communicate()
