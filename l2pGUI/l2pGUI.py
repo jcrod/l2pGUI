@@ -471,6 +471,7 @@ class L2pRadar(Tk.Tk):
         
         # Update Sun position every 20 animation steps
         if i % 20 == 0:
+            # Print FPS
             #newtime = time.time()
             #print('\nFPS: {:4.1f}\n'.format(20 / (newtime - self.time)))
             #self.time = newtime
@@ -502,7 +503,7 @@ class L2pRadar(Tk.Tk):
                 self.sunav_line[0].set_data(A, 90 - B)
             else:
                 self.sunav_line[0].set_data(0, 0)
-                
+
         return (self.lines + self.tel_line + self.sun_line + 
                 self.points +  self.heos + self.sunav_line)
     
