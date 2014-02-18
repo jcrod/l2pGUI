@@ -29,7 +29,7 @@ def sunradeceqtime(JD):
     '''
     # Julian century
     JC = (JD - 2451545) / 36525.
-    
+
     # Geom mean longitude and mean anomaly of the Sun (deg)
     #gmls = math.mod(280.46646 + JC * (36000.76983 + JC * 0.0003032), 360)
     gmls = 280.46646 + JC * (36000.76983 + JC * 0.0003032) % 360
@@ -42,15 +42,15 @@ def sunradeceqtime(JD):
     seqctr = (math.sin(gmas * D2R) * (1.914602 - JC * (0.004817 +
              0.000014 * JC)) + math.sin(2 * gmas * D2R) * (0.019993 -
              0.000101 * JC) + math.sin(3 * gmas * D2R) * 0.000289)
-             
+
     # Sun true longitude and true anomaly (deg)
     struel = gmls + seqctr
     struea = gmas + seqctr
-    
+
     # Sun radius vector (AU)
     sradv = (1.000001018 * (1 - ecceo**2)) / (1 + ecceo * 
             math.cos(struea * math.pi / 180))
-            
+
     # Sun apparent longitude (deg)
     sappl = struel - 0.00569 - 0.00478 * math.sin(D2R * 
             (125.04 - 1934.136 * JC))
@@ -95,7 +95,7 @@ def sunradec2azel(sde, eqtime, JD, TZ=0, lon=0.3361, lat=50.8674):
     HAsunr = R2D * (math.acos(math.cos(D2R * 90.833) / 
              (math.cos(D2R * lat) * math.cos(D2R * sde)) -
              math.tan(D2R * lat) * math.tan(D2R * sde)))
-             
+    
     # Civil twilight
     try:
         HAcivt = R2D * (math.acos(math.cos(D2R * 96) / 
@@ -143,7 +143,7 @@ def sunradec2azel(sde, eqtime, JD, TZ=0, lon=0.3361, lat=50.8674):
     Stimes['Sunldur'] = 8 * HAsunr
     
     # True solar time (min)
-    trueSolt = 1440*t + eqtime + 4*lon - 60*TZ % 1440
+    trueSolt = (1440*t + eqtime + 4*lon - 60*TZ) % 1440
 
     # Hour angle (deg)
     if trueSolt / 4 < 0:

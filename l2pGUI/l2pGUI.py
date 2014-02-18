@@ -228,16 +228,19 @@ class L2pRadar(Tk.Tk):
         self.frameCtrls.pack(side='left')
         self.buttonLimitUp = Tk.Button(self.frameCtrls, text='Up',
                                        command=self.plotLimitUp, bg='grey')
-        self.buttonLimitDown = Tk.Button(self.frameCtrls, text='Dn',
+        self.buttonLimitDown = Tk.Button(self.frameCtrls, text='Down',
                                          command=self.plotLimitDown, bg='grey')
         self.buttonRotate = Tk.Button(self.frameCtrls, text='Rot',
                                       command=self.plotRotate, bg='grey')
         self.buttonHEO = Tk.Button(self.frameCtrls, text='HEO',
                                    command=self.displayHEO, bg='grey')
+        self.buttonQuit = Tk.Button(self.frameCtrls, text='Quit',
+                                    command=self.close, bg='grey')
         self.buttonLimitUp.pack(side='top', fill=Tk.X, pady=2)
         self.buttonLimitDown.pack(side='top', fill=Tk.X, pady=2)
         self.buttonRotate.pack(side='top', fill=Tk.X, pady=2)
         self.buttonHEO.pack(side='top', fill=Tk.X, pady=2)
+        self.buttonQuit.pack(side='top', fill=Tk.X, pady=2)
         self.protocol("WM_DELETE_WINDOW", self.close)
         self.framePlot = Tk.Frame(self.root)
         self.framePlot.pack(side='left', fill=Tk.BOTH, expand=1)
@@ -532,6 +535,7 @@ class L2pRadar(Tk.Tk):
         
     def reconnect(self):
         """Try to re-establish connections"""
+        print('\nAttempting to reconnect to l2p server...\n')
         self.planeQueue.close()
         self.planeQueue = multiprocessing.Queue()
         self.procWorker.terminate()
