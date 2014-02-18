@@ -15,7 +15,6 @@ import numpy as np
 import Tkinter as Tk
 import socket
 import multiprocessing
-#import subprocess
 import signal
 import argparse
 import matplotlib
@@ -27,7 +26,9 @@ from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import time
 import datetime as dt
-import noaasun
+import sunpos
+# The following modules are highly specific to NSGF, they are
+# of no use to anyone else and hence not included here
 #import funplot as fp
 #import plot_plist2 as pp2
 #import satpar as sp
@@ -494,15 +495,15 @@ class L2pRadar(Tk.Tk):
             #print('\nFPS: {:4.1f}\n'.format(20 / (newtime - self.time)))
             #self.time = newtime
             if not self.replay:
-                d, JD = noaasun.parseDates(mode='now')
-                sunAz, sunEl = noaasun.sunpos(JD, lon=LON, lat=LAT)
+                d, JD = sunpos.parseDates(mode='now')
+                sunAz, sunEl = sunpos.sunpos(JD, lon=LON, lat=LAT)
             else:
                 # Read MJD from data so that the Sun is in the right place
                 if len(self.P) > 0:
                     # Update last date if planes found
                     self.last_mjd = (self.P.values()[0].mjd[-1] + 
                                  self.P.values()[0].epc[-1] / 86400)
-                sunAz, sunEl = noaasun.sunpos(JD=2400000.5 + self.last_mjd,
+                sunAz, sunEl = sunpos.sunpos(JD=2400000.5 + self.last_mjd,
                                               lon=LON, lat=LAT)
                 
             sunAz = sunAz * np.pi / 180
