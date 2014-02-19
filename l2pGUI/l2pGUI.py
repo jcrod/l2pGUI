@@ -27,7 +27,7 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import time
 import datetime as dt
 import sunpos
-# The following modules are highly specific to NSGF, they are
+# The following modules are highly specific to NSGF,
 # of no use to anyone else and hence not included here
 #import funplot as fp
 #import plot_plist2 as pp2
@@ -104,7 +104,16 @@ def loadPlanesFile(fname, minel=-5):
     print('{} planes loaded in {:<4.2f} seconds'.format(len(P), t))
     return P
 
-    
+
+def planePlot(p_dict, key1=None, key2=None, skip=10, ls='.'):
+    fig = plt.figure(1)
+    ax = fig.add_subplot(111)
+    for plane in p_dict.values():
+        ax.plot(getattr(plane, key1)[::skip], getattr(plane, key2)[::skip],
+                linestyle='-')
+    plt.show()
+
+
 def colourMaplimits(value_limits=(0, 80), colourmap_limits=(0.05, 0.85)):
     """Compute a and b coefficients that bring values from value_limits
     to colourmap_limits in a linear way.
@@ -294,6 +303,7 @@ class L2pRadar(Tk.Tk):
         self.sun_line = self.ax.plot([], [], 'o', color='gold',
                                      ms=25, alpha=0.8)
         self.sunav_line = self.ax.plot([], [], color='gold', lw=2, alpha=0.8)
+        self.alert_line = self.ax.plot([], [], 'ro', ms=50, alpha=0.4)
         self.yhigh = 90
         self.ax.set_ylim(0, self.yhigh)
         self.heos = self.ax.plot([], [], 'o', color='red')
@@ -366,10 +376,10 @@ class L2pRadar(Tk.Tk):
             #point.set_data([], [])
         for line in self.lines:
             line.set_data([], [])
-        for line in [self.tel_line, self.sun_line, self.heos, self.sunav_line, self.points]:
+        for line in [self.tel_line, self.sun_line, self.heos, self.sunav_line, self.points, self.alert_line]:
             line[0].set_data([], [])
         return (self.lines + self.tel_line + self.sun_line + 
-                self.points + self.heos  + self.sunav_line)
+                self.points + self.heos  + self.sunav_line + self.alert_line)
     
     def el2zdist(self, x):
         """Elevation to zenith distance (degrees)"""
@@ -440,7 +450,7 @@ class L2pRadar(Tk.Tk):
         if len(telLines) > 0:
             self.telLines = telLines[-1]
         else:
-            self.telLines = '0 0 0 00.00 00.00 0'
+            self.telLines = '0 0 0 00.00 00.00 1'
         
     def animate(self, i):
         """Matplotlib animation function
@@ -448,8 +458,8 @@ class L2pRadar(Tk.Tk):
         NB here 'lines' refers to plot lines, not data lines
         """
         self.updateData()
-        if not self.print_lines:
-            self.formattedOutput()
+        #if not self.print_lines:
+            #self.formattedOutput()
 
         # Az/El from planes present in the dictionary, grabbing only 
         # the last 80 positions available in steps of 5
@@ -487,6 +497,11 @@ class L2pRadar(Tk.Tk):
         telAz = float(telPos[0]) * np.pi / 180
         telEl = float(telPos[1][:4])
         self.tel_line[0].set_data(telAz, 90 - telEl)
+        # Draw a red circle if too close to a plane
+        if self.telLines.split()[5][:1] != '1':
+            self.alert_line[0].set_data(telAz, 90 - telEl)
+        else:
+            self.alert_line[0].set_data([], [])
         
         # Update Sun position every 20 animation steps
         if i % 20 == 0:
@@ -522,9 +537,9 @@ class L2pRadar(Tk.Tk):
                 self.sunav_line[0].set_data(A, 90 - B)
             else:
                 self.sunav_line[0].set_data(0, 0)
-
+                
         return (self.lines + self.tel_line + self.sun_line + 
-                self.points +  self.heos + self.sunav_line)
+                self.points +  self.heos + self.sunav_line + self.alert_line)
     
     def run(self, newcon=False):
         """Start subprocesses and Matplotlib animation loop"""
