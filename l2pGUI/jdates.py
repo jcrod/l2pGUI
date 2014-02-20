@@ -2,6 +2,7 @@
 '''Various functions to deal with Julian Dates'''
 
 import numpy as np
+import datetime as dt
 
 def s2hms(epoch):
     h, m = divmod(epoch, 3600)
@@ -68,6 +69,13 @@ def jdToday():
     print jd
     return
     
+
+def jdNow():
+    '''JD right now'''
+    d = dt.datetime.utcnow()
+    fd = ((d.hour * 60 + d.minute) * 60 + d.second) / 86400.
+    return gcal2jd(d.year, d.month, d.day + fd)
+
 
 def jd2gcal2(JD=2443716):
     '''From Explanatory Supplement. It starts at 12:00.

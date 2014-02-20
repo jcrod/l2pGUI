@@ -26,7 +26,8 @@ from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import time
 import datetime as dt
-import sunpos
+import jdates as jd
+import sunmoon
 # The following modules are highly specific to NSGF,
 # of no use to anyone else and hence not included here
 #import funplot as fp
@@ -37,7 +38,7 @@ import sunpos
 L2P_HOST = ('193.61.194.29', 2020)
 LON = 0.3361
 LAT = 50.8674
-
+HEIGHT = 75.357
 
 def dataFakeRead(f, init_pos=None, N_lines=140, print_lines=False):
     """Reads lines from file from specified position to end.
@@ -303,10 +304,12 @@ class L2pRadar(Tk.Tk):
         self.sun_line = self.ax.plot([], [], 'o', color='gold',
                                      ms=25, alpha=0.8)
         self.sunav_line = self.ax.plot([], [], color='gold', lw=2, alpha=0.8)
+        self.moon_line = self.ax.plot([], [], 'o', ms=22, color='white', 
+                                      alpha=0.6)
         self.alert_line = self.ax.plot([], [], 'ro', ms=50, alpha=0.4)
         self.yhigh = 90
         self.ax.set_ylim(0, self.yhigh)
-        self.heos = self.ax.plot([], [], 'o', color='red')
+        self.heos_line = self.ax.plot([], [], 'ro', ms=8)
     
         self.time = time.time()
     
@@ -367,7 +370,7 @@ class L2pRadar(Tk.Tk):
             gazelr = fp.azelsat(npass, epoch, fun_path=self.tmpath)
             gazs.append(gazelr[0, 0])
             gels.append(90 - gazelr[0, 1] * 180 / np.pi)
-        self.heos[0].set_data(gazs, gels)        
+        self.heos_line[0].set_data(gazs, gels)        
 
     def anim_init(self):
         """Initial plot state"""
@@ -376,10 +379,13 @@ class L2pRadar(Tk.Tk):
             #point.set_data([], [])
         for line in self.lines:
             line.set_data([], [])
-        for line in [self.tel_line, self.sun_line, self.heos, self.sunav_line, self.points, self.alert_line]:
+        for line in [self.tel_line, self.sun_line, self.sunav_line, 
+                     self.points, self.alert_line, self.moon_line,
+                     self.heos_line]:
             line[0].set_data([], [])
-        return (self.lines + self.tel_line + self.sun_line + 
-                self.points + self.heos  + self.sunav_line + self.alert_line)
+        return (self.lines + self.points + self.tel_line +
+                self.sun_line + self.sunav_line + self.moon_line +
+                self.alert_line + self.moon_line + self.heos_line)
     
     def el2zdist(self, x):
         """Elevation to zenith distance (degrees)"""
@@ -446,6 +452,8 @@ class L2pRadar(Tk.Tk):
                              dataFakeRead(self.datafile, self.pos,
                                           print_lines=self.print_lines).next())
             self.P = addPlanes(planeLines, self.P, minel=0, time_alive=15)
+            if not planeLines:
+                self.anim._stop()
         
         if len(telLines) > 0:
             self.telLines = telLines[-1]
@@ -458,8 +466,8 @@ class L2pRadar(Tk.Tk):
         NB here 'lines' refers to plot lines, not data lines
         """
         self.updateData()
-        #if not self.print_lines:
-            #self.formattedOutput()
+        if not self.print_lines:
+            self.formattedOutput()
 
         # Az/El from planes present in the dictionary, grabbing only 
         # the last 80 positions available in steps of 5
@@ -489,7 +497,7 @@ class L2pRadar(Tk.Tk):
         if (self.visHEO is True) and (i % 15 == 0):
             self.plotHEO()
         elif self.visHEO is False:
-            self.heos[0].set_data([], [])
+            self.heos_line[0].set_data([], [])
             
         # Telescope position
         # 56692  41847.094 telscp  75.00  65.00 1
@@ -503,27 +511,29 @@ class L2pRadar(Tk.Tk):
         else:
             self.alert_line[0].set_data([], [])
         
-        # Update Sun position every 20 animation steps
+        # Update Sun/Moon positions every 20 animation steps
         if i % 20 == 0:
-            # Print FPS
+            ## Print FPS
             #newtime = time.time()
             #print('\nFPS: {:4.1f}\n'.format(20 / (newtime - self.time)))
             #self.time = newtime
             if not self.replay:
-                d, JD = sunpos.parseDates(mode='now')
-                sunAz, sunEl = sunpos.sunpos(JD, lon=LON, lat=LAT)
+                JD = jd.jdNow()
+                sunAz, sunEl,_ = sunmoon.sunazel(JD, LAT, LON, HEIGHT)
+                mAz, mEl, mR = sunmoon.moonazel(JD, LAT, LON, HEIGHT)
             else:
                 # Read MJD from data so that the Sun is in the right place
                 if len(self.P) > 0:
                     # Update last date if planes found
                     self.last_mjd = (self.P.values()[0].mjd[-1] + 
                                  self.P.values()[0].epc[-1] / 86400)
-                sunAz, sunEl = sunpos.sunpos(JD=2400000.5 + self.last_mjd,
-                                              lon=LON, lat=LAT)
-                
-            sunAz = sunAz * np.pi / 180
+                sunAz, sunEl,_ = sunmoon.sunazel(2400000.5 + self.last_mjd,
+                                               LAT, LON, HEIGHT)
+                mAz, mEl,_ = sunmoon.moonazel(2400000.5 + self.last_mjd,
+                                                LAT, LON, HEIGHT)
+            sunEl = sunEl * 180 / np.pi
             self.sun_line[0].set_data(sunAz, 90 - sunEl)
-            
+            self.moon_line[0].set_data(mAz, 90 - mEl * 180 / np.pi)            
             # Draw Sun avoidance region         
             if sunEl > -20:
                 radius = 15
@@ -539,7 +549,8 @@ class L2pRadar(Tk.Tk):
                 self.sunav_line[0].set_data(0, 0)
                 
         return (self.lines + self.tel_line + self.sun_line + 
-                self.points +  self.heos + self.sunav_line + self.alert_line)
+                self.points + self.heos_line + self.sunav_line + 
+                self.alert_line + self.moon_line)
     
     def run(self, newcon=False):
         """Start subprocesses and Matplotlib animation loop"""
