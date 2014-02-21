@@ -2,8 +2,10 @@
 README.txt
 setup.py
 bin/l2pgui_run.py
+conf/l2pGUI.cfg
 l2pGUI/__init__.py
+l2pGUI/coords_math.py
 l2pGUI/jdates.py
 l2pGUI/l2pGUI.py
-l2pGUI/noaasun.py
+l2pGUI/sunmoon.py
 l2pGUI/test.py

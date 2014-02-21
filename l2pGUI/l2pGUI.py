@@ -8,7 +8,7 @@ collection speed.
 
 The application needs to know the IP address of the l2planes server, and 
 the coordinates of the observing station for correct determination of the 
-Sun position. These can be set below.
+Sun/Moon positions. These can be set below.
 '''
 import sys, os
 import numpy as np
@@ -17,6 +17,7 @@ import socket
 import multiprocessing
 import signal
 import argparse
+import ConfigParser
 import matplotlib
 matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
@@ -34,11 +35,6 @@ import sunmoon
 #import plot_plist2 as pp2
 #import satpar as sp
 
-
-L2P_HOST = ('193.61.194.29', 2020)
-LON = 0.3361
-LAT = 50.8674
-HEIGHT = 75.357
 
 def dataFakeRead(f, init_pos=None, N_lines=140, print_lines=False):
     """Reads lines from file from specified position to end.
@@ -230,12 +226,14 @@ class L2pRadar(Tk.Tk):
             to this file will be displayed
     dump2file: if True, collected data will be written to a file
     """
-    def __init__(self, replay=None, dump2file=None, print_lines=None, Tstep=1000):
+    def __init__(self, replay=None, dump2file=None, print_lines=None, 
+                 Tstep=1000, **kwargs):
         Tk.Tk.__init__(self)
         self.replay = replay
         self.dump2file = dump2file
         self.print_lines = print_lines
         self.Tstep = Tstep
+        
         self.MaxPlanes = 25
         self.tmpath = os.path.expanduser('~/.plotsched_tmp')
         self.visHEO = False
@@ -307,10 +305,9 @@ class L2pRadar(Tk.Tk):
         self.moon_line = self.ax.plot([], [], 'o', ms=22, color='white', 
                                       alpha=0.6)
         self.alert_line = self.ax.plot([], [], 'ro', ms=50, alpha=0.4)
+        self.heos_line = self.ax.plot([], [], 'ro', ms=8)
         self.yhigh = 90
         self.ax.set_ylim(0, self.yhigh)
-        self.heos_line = self.ax.plot([], [], 'ro', ms=8)
-    
         self.time = time.time()
     
     def plotLimitUp(self):
@@ -474,13 +471,13 @@ class L2pRadar(Tk.Tk):
         Azs = [p.az[-80::5] for p in self.P.values()]
         Els = [p.el[-80::5] for p in self.P.values()]
         
-        colours = ((p.el[-1] + 5) / 100 for p in self.P.values() if len(p.el) > 0)
+        colors = ((p.el[-1] + 5)/100 for p in self.P.values() if len(p.el) > 0)
         Nplanes = len(Azs)
         if Nplanes > 0:
             # Update plot lines with Az/El data
             for j, line in enumerate(self.lines):
                 line.set_data(Azs[j], map(self.el2zdist, (Els[j])))
-                line.set_color(cm.jet(colours.next()))
+                line.set_color(cm.jet(colors.next()))
                 if j == Nplanes - 1:
                     # Reset plot lines from previous planes
                     for line in self.lines[Nplanes:]:
@@ -493,7 +490,6 @@ class L2pRadar(Tk.Tk):
         y = [n[-1] for n in Els]
         self.points[0].set_data(x, map(self.el2zdist, y))
 
-        
         if (self.visHEO is True) and (i % 15 == 0):
             self.plotHEO()
         elif self.visHEO is False:
@@ -511,7 +507,7 @@ class L2pRadar(Tk.Tk):
         else:
             self.alert_line[0].set_data([], [])
         
-        # Update Sun/Moon positions every 20 animation steps
+        # Sun/Moon positions updated every 20 animation steps
         if i % 20 == 0:
             ## Print FPS
             #newtime = time.time()
@@ -557,7 +553,7 @@ class L2pRadar(Tk.Tk):
         if newcon is True:
             self.planeQueue = multiprocessing.Queue()
             self.procWorker = multiprocessing.Process(target=receive_proc,
-                                                      args=[self.planeQueue])
+                                         args=[self.planeQueue, L2P_HOST])
             self.procWorker.start()
             
         self.anim = animation.FuncAnimation(self.fig1, self.animate,
@@ -577,7 +573,7 @@ class L2pRadar(Tk.Tk):
         self.planeQueue = multiprocessing.Queue()
         self.procWorker.terminate()
         self.procWorker = multiprocessing.Process(target=receive_proc,
-                                                      args=[self.planeQueue])
+                                        args=[self.planeQueue, L2P_HOST])
         self.procWorker.start()
         
     def close(self):
@@ -592,7 +588,7 @@ class L2pRadar(Tk.Tk):
         sys.exit()
 
 
-def receive_proc(planeQueue):
+def receive_proc(planeQueue, L2P_HOST):
     """Requests data lines from l2planes and sends it to the queue"""
     connSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
@@ -646,9 +642,30 @@ def main(argv=None):
                         help='Time in milliseconds between animation steps')
     args = parser.parse_args()
     
+    config = ConfigParser.RawConfigParser()
+    locs = [os.curdir, os.path.expanduser('~'), '/usr/etc/l2pGUI', 
+            os.path.join(os.path.dirname(sys.executable), 
+            os.path.join('etc', 'l2pGUI'))]
+    
+    for loc in locs:
+        try: 
+            with open(os.path.join(loc, 'l2pGUI.cfg')) as cfile:
+                config.readfp(cfile)
+        except IOError:
+            pass
+
+    global L2P_HOST, LON, LAT, HEIGHT
+    HOST = config.get('Server', 'l2p_host')
+    PORT = config.getint('Server', 'l2p_port')
+    L2P_HOST = (HOST, PORT)
+    LON = config.getfloat('Station', 'lon')
+    LAT = config.getfloat('Station', 'lat')
+    HEIGHT = config.getfloat('Station', 'height')    
+    
     # Some house keeping with a hammer to clean processes from previous 
-    # runs in Linux systems. Not needed anymore since we're properly 
-    # terminating child processes. Left here just in case.
+    # runs in Linux systems, using system tools to kill processes by name.
+    # Not needed anymore since we're properly terminating child processes.
+    # Left here just in case.
     #if (sys.platform == 'linux') or (sys.platform == 'linux2'):
         #p = subprocess.Popen(['ps', 'aux'], stdout=subprocess.PIPE)
         #ps, err = p.communicate()
@@ -665,6 +682,23 @@ def main(argv=None):
                    Tstep=args.time_step)
     app.mainloop()
     
-    
-if __name__ == "__main__":
+
+if __name__ == "__main__":  
     sys.exit(main())
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
