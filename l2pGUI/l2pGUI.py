@@ -31,9 +31,9 @@ import jdates as jd
 import sunmoon
 # The following modules are highly specific to NSGF,
 # of no use to anyone else and hence not included here
-#import funplot as fp
-#import plot_plist2 as pp2
-#import satpar as sp
+import funplot as fp
+import plot_plist2 as pp2
+import satpar as sp
 
 
 def dataFakeRead(f, init_pos=None, N_lines=140, print_lines=False):
@@ -273,6 +273,7 @@ class L2pRadar(Tk.Tk):
         # otherwise proceed normally
         else:
             self.setFig()
+            self.fig1.canvas.mpl_connect('pick_event', self.onpick)
             self.run(newcon=True)
             if self.dump2file:
                 self.outFile = open(self.dump2file, 'w')
@@ -305,7 +306,7 @@ class L2pRadar(Tk.Tk):
         self.moon_line = self.ax.plot([], [], 'o', ms=22, color='white', 
                                       alpha=0.6)
         self.alert_line = self.ax.plot([], [], 'ro', ms=50, alpha=0.4)
-        self.heos_line = self.ax.plot([], [], 'ro', ms=8)
+        self.heos_line = self.ax.plot([], [], 'ro', ms=8, picker=5)
         self.yhigh = 90
         self.ax.set_ylim(0, self.yhigh)
         self.time = time.time()
@@ -358,8 +359,12 @@ class L2pRadar(Tk.Tk):
         utcnow = dt.datetime.utcnow()
         epoch = utcnow.second + 60 * (utcnow.minute + 60 * utcnow.hour)
         gazs, gels = [], []
+        self.npass = []
+        self.sname = []
         for line in heo_list:
             npass = line[1:4]
+            self.npass.append(npass)
+            self.sname.append(line[5:15])
             function = os.path.join(self.tmpath, 'function.' + npass)
             if not os.path.exists(function):
                 sp.ftpit('function.' + npass, path='pred')
@@ -367,8 +372,9 @@ class L2pRadar(Tk.Tk):
             gazelr = fp.azelsat(npass, epoch, fun_path=self.tmpath)
             gazs.append(gazelr[0, 0])
             gels.append(90 - gazelr[0, 1] * 180 / np.pi)
-        self.heos_line[0].set_data(gazs, gels)        
-
+        self.heos_line[0].set_data(gazs, gels)
+        
+    
     def anim_init(self):
         """Initial plot state"""
         #for line, point in zip(self.lines, self.points):
@@ -394,7 +400,7 @@ class L2pRadar(Tk.Tk):
         #-------------------------------------------------------------        
         #a2b728  UPS203    291 15.4    -0.199   50.994    11278  41.7
         #aa7974  SOO275    343  5.1    -0.101   51.754    10058 103.8
-        print(' hex      id       Az  El      Lon     Lat        Alt   Dist')
+        print('\n hex      id       Az  El      Lon     Lat        Alt   Dist')
         print '-' * 62
         for plane in self.P.values():
             strf = '{:8s}{:8s} {:4.0f}{:5.1f} {:>9.3f}{:>9.3f} {:>8.0f}{:>6.1f}' 
@@ -464,7 +470,9 @@ class L2pRadar(Tk.Tk):
         """
         self.updateData()
         if not self.print_lines:
-            self.formattedOutput()
+            if i % 2 == 0:
+                # Print planes to screen every two cycles
+                self.formattedOutput()
 
         # Az/El from planes present in the dictionary, grabbing only 
         # the last 80 positions available in steps of 5
@@ -548,6 +556,16 @@ class L2pRadar(Tk.Tk):
                 self.points + self.heos_line + self.sunav_line + 
                 self.alert_line + self.moon_line)
     
+    def onpick(self, event):
+        '''Print to screen HEO details when clicking on them'''
+        thisline = event.artist
+        #xdata = thisline.get_xdata()
+        #ydata = thisline.get_ydata()
+        ind = event.ind
+        print len(self.sname)
+        print('\n{} {}\n'.format(self.sname[ind], self.npass[ind]))
+
+    
     def run(self, newcon=False):
         """Start subprocesses and Matplotlib animation loop"""
         if newcon is True:
@@ -560,7 +578,9 @@ class L2pRadar(Tk.Tk):
                init_func=self.anim_init, blit=True, interval=self.Tstep)
         
         signal.signal(signal.SIGINT, self.signal_handler)
+        
 
+        
     def signal_handler(self, signal, frame):
         """Catch SIGINT and close everything properly"""
         print('CTRL-C')
@@ -645,7 +665,8 @@ def main(argv=None):
     config = ConfigParser.RawConfigParser()
     locs = [os.curdir, os.path.expanduser('~'), '/usr/etc/l2pGUI', 
             os.path.join(os.path.dirname(sys.executable), 
-            os.path.join('etc', 'l2pGUI'))]
+            os.path.join('etc', 'l2pGUI')),
+            '/usr/local/etc/l2pGUI']
     
     for loc in locs:
         try: 
