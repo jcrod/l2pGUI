@@ -363,7 +363,7 @@ class L2pRadar(Tk.Tk):
     def displayHEO(self):
         """Toggle HEO visibility variable"""
         self.visHEO = not self.visHEO
-        print('HEO visibility set to {}'.format(self.visHEO))
+        print('\nHEO visibility set to {}'.format(self.visHEO))
         if self.visHEO is True:
             self.buttonHEO.configure(bg='green', activebackground='green')
             self.plotHEO()
@@ -394,15 +394,18 @@ class L2pRadar(Tk.Tk):
             gazelr = fp.azelsat(npass, epoch, fun_path=self.tmpath)
             gazs.append(gazelr[0, 0])
             gels.append(90 - gazelr[0, 1] * 180 / np.pi)
+
         self.heos_line[0].set_data(gazs, gels)
     
     def onpick(self, event):
         '''Print to screen HEO details when clicking on them'''
         thisline = event.artist
+        ind = event.ind
+        # Choose only one first satellite if two are close together
+        if len(ind) > 1:
+            ind = ind[0]
         xdata = thisline.get_xdata()
         ydata = thisline.get_ydata()
-        ind = event.ind
-        print len(self.sname)
         print('\n{} {}\n'.format(self.sname[ind], self.npass[ind]))
         self.txt_line.set_text(self.npass[ind])
         self.txt_line.set_position((xdata[ind], ydata[ind]))
@@ -417,6 +420,7 @@ class L2pRadar(Tk.Tk):
         #-------------------------------------------------------------        
         #a2b728  UPS203    291 15.4    -0.199   50.994    11278  41.7
         #aa7974  SOO275    343  5.1    -0.101   51.754    10058 103.8
+        os.system('cls' if os.name == 'nt' else 'clear')
         print('\n hex      id       Az  El      Lon     Lat        Alt   Dist')
         print '-' * 62
         for plane in self.P.values():
@@ -425,7 +429,6 @@ class L2pRadar(Tk.Tk):
                               plane.az[-1] * 180 / np.pi, plane.el[-1],
                               plane.lon[-1], plane.lat[-1],
                               plane.alt[-1], plane.ran[-1]))
-        print('')
         sys.stdout.flush()
             
     def process_lines(self, data_lines, print_lines=False, dump2file=False):
@@ -485,7 +488,7 @@ class L2pRadar(Tk.Tk):
         """
         self.updateData()
         if not self.print_lines:
-            # If print_lines is True don't add more garbage to the screen
+            #If print_lines is True don't add more garbage to the screen
             if i % 2 == 0:
                 # Print planes to screen every two cycles
                 self.formattedOutput()
@@ -535,10 +538,10 @@ class L2pRadar(Tk.Tk):
         
         # Sun/Moon positions updated every 20 animation steps
         if i % 20 == 0:
-            ## Print FPS
-            #newtime = time.time()
-            #print('\nFPS: {:4.1f}\n'.format(20 / (newtime - self.time)))
-            #self.time = newtime
+            # Print FPS
+            newtime = time.time()
+            print('\nFPS: {:4.1f}\n'.format(20 / (newtime - self.time)))
+            self.time = newtime
             if not self.replay:
                 JD = jd.jdNow()
                 sunAz, sunEl,_ = sunmoon.sunazel(JD, LAT, LON, HEIGHT)
@@ -672,10 +675,9 @@ def main(argv=None):
     args = parser.parse_args()
     
     config = ConfigParser.RawConfigParser()
-    locs = [os.curdir, os.path.expanduser('~'), '/usr/etc/l2pGUI', 
+    locs = [os.curdir, os.path.expanduser('~'), '/usr/l2pGUI', 
             os.path.join(os.path.dirname(sys.executable), 
-            os.path.join('etc', 'l2pGUI')),
-            '/usr/local/etc/l2pGUI']
+            '/usr/l2pGUI'), '/usr/local/l2pGUI']
     
     for loc in locs:
         try: 

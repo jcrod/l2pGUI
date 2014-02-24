@@ -10,12 +10,17 @@ collected data from a file.
 l2pGUI is essentially a Matplotlib polar plot animation embedded in 
 Tkinter with some extra controls (e.g. zoom level). The animation 
 performs sufficiently well and is low on resources at the refresh rates 
-that make practical sense for this application, i.e. 1-2 FPS. It is 
-possible to increase the frame rate when working offline, achieving tens 
-of frames per second at the expense of high CPU load.
+that make practical sense for this application (i.e. 1-2 FPS). It is 
+possible to increase the frame rate when working offline to obtain nice 
+animations, achieving tens of frames per second at the expense of high 
+CPU load.
 
 When called with no arguments, l2pGUI will attempt to connect to a 
-running instance of l2pserver.
+running instance of l2pserver. The IP address and port of the server are 
+specified in the configuration file l2pGUI.cfg, whose location depends on 
+the platform. The coordinates of the observing station are needed to 
+display the position of the Sun correctly, and can be entered in the same 
+configuration file.
 
 
 listen2planes display client
@@ -35,6 +40,4 @@ optional arguments:
 [1] http://en.wikipedia.org/wiki/Automatic_dependent_surveillance-broadcast
 [2] 
 
-Urls are http://like.this and links can be
-written `like this <http://www.example.com/foo/bar>`_.
 
