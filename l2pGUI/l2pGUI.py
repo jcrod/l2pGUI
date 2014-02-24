@@ -307,9 +307,30 @@ class L2pRadar(Tk.Tk):
                                       alpha=0.6)
         self.alert_line = self.ax.plot([], [], 'ro', ms=50, alpha=0.4)
         self.heos_line = self.ax.plot([], [], 'ro', ms=8, picker=5)
+        self.txt_line = self.ax.text(0, 0, '', color='r', fontsize=20,
+                                     weight='bold',
+                                     horizontalalignment='center',
+                                     verticalalignment='bottom')
         self.yhigh = 90
         self.ax.set_ylim(0, self.yhigh)
         self.time = time.time()
+
+    def anim_init(self):
+        """Initial plot state"""
+        #for line, point in zip(self.lines, self.points):
+            #line.set_data([], [])
+            #point.set_data([], [])
+        for line in self.lines:
+            line.set_data([], [])
+        for line in [self.tel_line, self.sun_line, self.sunav_line, 
+                     self.points, self.alert_line, self.moon_line,
+                     self.heos_line]:
+            line[0].set_data([], [])
+        self.txt_line.set_text('')
+        return (tuple(self.lines + self.points + self.tel_line +
+                self.sun_line + self.sunav_line + self.moon_line +
+                self.alert_line + self.moon_line + self.heos_line) +
+                (self.txt_line,))
     
     def plotLimitUp(self):
         """Decrease plot elevation range"""
@@ -345,8 +366,8 @@ class L2pRadar(Tk.Tk):
         if self.visHEO is True:
             self.buttonHEO.configure(bg='green', activebackground='green')
             self.plotHEO()
-            self.anim._stop()
-            self.run(newcon=False)    
+            #self.anim._stop()
+            #self.run(newcon=False)    
         else:
             self.buttonHEO.configure(bg='grey', activebackground='grey')
     
@@ -373,23 +394,18 @@ class L2pRadar(Tk.Tk):
             gazs.append(gazelr[0, 0])
             gels.append(90 - gazelr[0, 1] * 180 / np.pi)
         self.heos_line[0].set_data(gazs, gels)
+    
+    def onpick(self, event):
+        '''Print to screen HEO details when clicking on them'''
+        thisline = event.artist
+        xdata = thisline.get_xdata()
+        ydata = thisline.get_ydata()
+        ind = event.ind
+        print len(self.sname)
+        print('\n{} {}\n'.format(self.sname[ind], self.npass[ind]))
+        self.txt_line.set_text(self.npass[ind])
+        self.txt_line.set_position((xdata[ind], ydata[ind]))
         
-    
-    def anim_init(self):
-        """Initial plot state"""
-        #for line, point in zip(self.lines, self.points):
-            #line.set_data([], [])
-            #point.set_data([], [])
-        for line in self.lines:
-            line.set_data([], [])
-        for line in [self.tel_line, self.sun_line, self.sunav_line, 
-                     self.points, self.alert_line, self.moon_line,
-                     self.heos_line]:
-            line[0].set_data([], [])
-        return (self.lines + self.points + self.tel_line +
-                self.sun_line + self.sunav_line + self.moon_line +
-                self.alert_line + self.moon_line + self.heos_line)
-    
     def el2zdist(self, x):
         """Elevation to zenith distance (degrees)"""
         return 90 - x
@@ -498,10 +514,12 @@ class L2pRadar(Tk.Tk):
         y = [n[-1] for n in Els]
         self.points[0].set_data(x, map(self.el2zdist, y))
 
-        if (self.visHEO is True) and (i % 15 == 0):
+        # Display HEO satellites?
+        if (self.visHEO is True) and (i % 30 == 0):
             self.plotHEO()
         elif self.visHEO is False:
             self.heos_line[0].set_data([], [])
+            self.txt_line.set_text('')
             
         # Telescope position
         # 56692  41847.094 telscp  75.00  65.00 1
@@ -552,19 +570,10 @@ class L2pRadar(Tk.Tk):
             else:
                 self.sunav_line[0].set_data(0, 0)
                 
-        return (self.lines + self.tel_line + self.sun_line + 
-                self.points + self.heos_line + self.sunav_line + 
-                self.alert_line + self.moon_line)
-    
-    def onpick(self, event):
-        '''Print to screen HEO details when clicking on them'''
-        thisline = event.artist
-        #xdata = thisline.get_xdata()
-        #ydata = thisline.get_ydata()
-        ind = event.ind
-        print len(self.sname)
-        print('\n{} {}\n'.format(self.sname[ind], self.npass[ind]))
-
+        return (tuple(self.lines + self.points + self.tel_line +
+                self.sun_line + self.sunav_line + self.moon_line +
+                self.alert_line + self.moon_line + self.heos_line) +
+                (self.txt_line,))
     
     def run(self, newcon=False):
         """Start subprocesses and Matplotlib animation loop"""
