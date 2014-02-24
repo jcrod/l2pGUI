@@ -308,7 +308,7 @@ class L2pRadar(Tk.Tk):
                                       alpha=0.6)
         self.alert_line = self.ax.plot([], [], 'ro', ms=50, alpha=0.4)
         self.heos_line = self.ax.plot([], [], 'ro', ms=8, picker=5)
-        self.txt_line = self.ax.text(0, 0, '', color='r', fontsize=18,
+        self.txt_line = self.ax.text(0, 0, '', color='r', fontsize=16,
                                      weight='bold',
                                      horizontalalignment='center',
                                      verticalalignment='bottom')
@@ -387,10 +387,13 @@ class L2pRadar(Tk.Tk):
             self.sname.append(line[5:15])
             function = os.path.join(self.tmpath, 'function.' + npass)
             # Retrieve function unless we have it already and it's not too old
-            if not os.path.exists(function):
-                if (epoch - os.path.ctime(function) > 5 * 3600):
+            if os.path.exists(function):
+                if (time.time() - os.path.getctime(function) > 5 * 3600):
                     sp.ftpit('function.' + npass, path='pred')
                     os.renames('function.' + npass, function)
+	    else:
+                    sp.ftpit('function.' + npass, path='pred')
+                    os.renames('function.' + npass, function)	
             gazelr = fp.azelsat(npass, epoch, fun_path=self.tmpath)
             gazs.append(gazelr[0, 0])
             gels.append(90 - gazelr[0, 1] * 180 / np.pi)
@@ -538,10 +541,10 @@ class L2pRadar(Tk.Tk):
         
         # Sun/Moon positions updated every 20 animation steps
         if i % 20 == 0:
-            # Print FPS
-            newtime = time.time()
-            print('\nFPS: {:4.1f}\n'.format(20 / (newtime - self.time)))
-            self.time = newtime
+            ## Print FPS
+            #newtime = time.time()
+            #print('\nFPS: {:4.1f}\n'.format(20 / (newtime - self.time)))
+            #self.time = newtime
             if not self.replay:
                 JD = jd.jdNow()
                 sunAz, sunEl,_ = sunmoon.sunazel(JD, LAT, LON, HEIGHT)
