@@ -239,6 +239,7 @@ class L2pRadar(Tk.Tk):
         self.visHEO = False
         self.P = {}
         self.last_mjd = 0
+        self.telLines = '0 0 0 00.00 00.00 1'
         
         self.root = Tk.Tk._root(self)
         self.root.configure(background='black')
@@ -302,12 +303,12 @@ class L2pRadar(Tk.Tk):
         self.tel_line = self.ax.plot([], [], 'o', color='#00ff00', ms=10)
         self.sun_line = self.ax.plot([], [], 'o', color='gold',
                                      ms=25, alpha=0.8)
-        self.sunav_line = self.ax.plot([], [], color='gold', lw=2, alpha=0.8)
+        self.sunav_line = self.ax.plot([], [], color='gold', lw=2, alpha=0.6)
         self.moon_line = self.ax.plot([], [], 'o', ms=22, color='white', 
                                       alpha=0.6)
         self.alert_line = self.ax.plot([], [], 'ro', ms=50, alpha=0.4)
         self.heos_line = self.ax.plot([], [], 'ro', ms=8, picker=5)
-        self.txt_line = self.ax.text(0, 0, '', color='r', fontsize=20,
+        self.txt_line = self.ax.text(0, 0, '', color='r', fontsize=18,
                                      weight='bold',
                                      horizontalalignment='center',
                                      verticalalignment='bottom')
@@ -366,8 +367,6 @@ class L2pRadar(Tk.Tk):
         if self.visHEO is True:
             self.buttonHEO.configure(bg='green', activebackground='green')
             self.plotHEO()
-            #self.anim._stop()
-            #self.run(newcon=False)    
         else:
             self.buttonHEO.configure(bg='grey', activebackground='grey')
     
@@ -387,9 +386,11 @@ class L2pRadar(Tk.Tk):
             self.npass.append(npass)
             self.sname.append(line[5:15])
             function = os.path.join(self.tmpath, 'function.' + npass)
+            # Retrieve function unless we have it already and it's not too old
             if not os.path.exists(function):
-                sp.ftpit('function.' + npass, path='pred')
-                os.renames('function.' + npass, function)
+                if (epoch - os.path.ctime(function) > 5 * 3600):
+                    sp.ftpit('function.' + npass, path='pred')
+                    os.renames('function.' + npass, function)
             gazelr = fp.azelsat(npass, epoch, fun_path=self.tmpath)
             gazs.append(gazelr[0, 0])
             gels.append(90 - gazelr[0, 1] * 180 / np.pi)
@@ -476,8 +477,6 @@ class L2pRadar(Tk.Tk):
         
         if len(telLines) > 0:
             self.telLines = telLines[-1]
-        else:
-            self.telLines = '0 0 0 00.00 00.00 1'
         
     def animate(self, i):
         """Matplotlib animation function
@@ -486,6 +485,7 @@ class L2pRadar(Tk.Tk):
         """
         self.updateData()
         if not self.print_lines:
+            # If print_lines is True don't add more garbage to the screen
             if i % 2 == 0:
                 # Print planes to screen every two cycles
                 self.formattedOutput()
