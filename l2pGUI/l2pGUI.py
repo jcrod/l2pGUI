@@ -79,7 +79,7 @@ def dataFakeRead(f, init_pos=None, N_lines=140, print_lines=False):
 
 
 def loadPlanesFile(fname, minel=-5):
-    """Loads planes data from file. Useful for analysis.
+    """Loads planes data from file. Useful for offline analysis.
     
     Parameters
     ----------
@@ -225,6 +225,8 @@ class L2pRadar(Tk.Tk):
     replay: if specified, listen2planes data previously written 
             to this file will be displayed
     dump2file: if True, collected data will be written to a file
+    print_lines: print to screen raw data lines as they are received
+    Tstep: time interval between animation steps. Default=1000 ms
     """
     def __init__(self, replay=None, dump2file=None, print_lines=None, 
                  Tstep=1000, **kwargs):
@@ -318,9 +320,6 @@ class L2pRadar(Tk.Tk):
 
     def anim_init(self):
         """Initial plot state"""
-        #for line, point in zip(self.lines, self.points):
-            #line.set_data([], [])
-            #point.set_data([], [])
         for line in self.lines:
             line.set_data([], [])
         for line in [self.tel_line, self.sun_line, self.sunav_line, 
@@ -391,7 +390,7 @@ class L2pRadar(Tk.Tk):
                 if (time.time() - os.path.getctime(function) > 5 * 3600):
                     sp.ftpit('function.' + npass, path='pred')
                     os.renames('function.' + npass, function)
-	    else:
+            else:
                     sp.ftpit('function.' + npass, path='pred')
                     os.renames('function.' + npass, function)	
             gazelr = fp.azelsat(npass, epoch, fun_path=self.tmpath)
@@ -404,7 +403,7 @@ class L2pRadar(Tk.Tk):
         '''Print to screen HEO details when clicking on them'''
         thisline = event.artist
         ind = event.ind
-        # Choose only one first satellite if two are close together
+        # Choose only first satellite if two are close together
         if len(ind) > 1:
             ind = ind[0]
         xdata = thisline.get_xdata()
@@ -496,7 +495,7 @@ class L2pRadar(Tk.Tk):
                 # Print planes to screen every two cycles
                 self.formattedOutput()
 
-        # Az/El from planes present in the dictionary, grabbing only 
+        # Az/El from planes present in the dictionary, grabbing
         # the last 80 positions available in steps of 5
         Azs = [p.az[-80::5] for p in self.P.values()]
         Els = [p.el[-80::5] for p in self.P.values()]
@@ -593,7 +592,6 @@ class L2pRadar(Tk.Tk):
                init_func=self.anim_init, blit=True, interval=self.Tstep)
         
         signal.signal(signal.SIGINT, self.signal_handler)
-        
 
         
     def signal_handler(self, signal, frame):
