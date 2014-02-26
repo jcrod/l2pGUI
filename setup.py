@@ -3,8 +3,8 @@ from distutils.core import setup
 setup(
     name='l2pGUI',
     version='0.9',
-    author='Jose Rodriguez',
-    author_email='josrod@nerc.ac.uk',
+    author='jcrod',
+    author_email='',
     url='www.sgf.rgo.ac.uk',
     packages=['l2pGUI'],
     scripts=['bin/l2pgui_run.py'],
