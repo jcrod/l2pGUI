@@ -26,14 +26,19 @@ Requirements: Python (tested with 2.7), Matplotlib
 
 Install with pip: 
 
-pip install l2pGUI-master.zip
+    pip install l2pGUI-master.zip
 
-Run with the command l2pgui_run.py
+or:
 
-Or extract contents, modify and copy conf/l2pGUI.cfg to the working
+    python setup.py install
+
+Run as:
+    l2pgui_run.py
+
+Alternatively, extract contents, modify and copy conf/l2pGUI.cfg to the working
 directory and run from there:
 
-python l2pGUI.py
+    python l2pGUI.py
 
 
 
