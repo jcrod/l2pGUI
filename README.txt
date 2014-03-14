@@ -28,7 +28,7 @@ Install with pip:
 
     pip install l2pGUI-master.zip
 
-or:
+or uncompress, changed directory and:
 
     python setup.py install
 
