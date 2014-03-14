@@ -37,7 +37,9 @@ optional arguments:
                         Time in milliseconds between animation steps
                        
 
-[1] http://en.wikipedia.org/wiki/Automatic_dependent_surveillance-broadcast
-[2] 
+License: GPLv2
+Disclaimer:  http://www.bgs.ac.uk/downloads/softdisc.html
 
+[1] http://en.wikipedia.org/wiki/Automatic_dependent_surveillance-broadcast
+[2] https://github.com/matwiNERC/listen2planes
 
