@@ -18,9 +18,21 @@ CPU load.
 When called with no arguments, l2pGUI will attempt to connect to a 
 running instance of l2pserver. The IP address and port of the server are 
 specified in the configuration file l2pGUI.cfg, whose location depends on 
-the platform. The coordinates of the observing station are needed to 
-display the position of the Sun correctly, and can be entered in the same 
-configuration file.
+the platform (probably /usr/l2pGUI/ on Linux). The coordinates 
+of the observing station are needed to display the position of the Sun 
+correctly, and can be entered in the same configuration file.
+
+Install with pip: 
+
+pip install l2pGUI-master.zip
+
+Run with the command l2pgui_run.py
+
+Or extract contents, modify and copy conf/l2pGUI.cfg to the working
+directory and run from there:
+
+python l2pGUI.py
+
 
 
 listen2planes display client
