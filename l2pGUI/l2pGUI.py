@@ -166,6 +166,7 @@ class Plane():
             self.epc.append(float(l[1]))
             if self.epc[-1] < self.last_epoch:
                 self.epc[-1] += 86000
+            # I should reconsider the following line and its usefulness...
             if self.epc[-1] - self.last_epoch > 600000:
                 self.gaps = 1
                 del(self.epc[-1])
