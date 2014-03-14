@@ -33,6 +33,7 @@ or uncompress, changed directory and:
     python setup.py install
 
 Run as:
+
     l2pgui_run.py
 
 Alternatively, extract contents, modify and copy conf/l2pGUI.cfg to the working
