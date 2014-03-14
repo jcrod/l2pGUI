@@ -12,13 +12,15 @@ Sun/Moon positions. These can be set in the configuration file l2pGUI.cfg.
 '''
 
 import sys, os
-import numpy as np
 import Tkinter as Tk
 import socket
 import multiprocessing
 import signal
 import argparse
 import ConfigParser
+import time
+
+import numpy as np
 import matplotlib
 matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
@@ -26,7 +28,7 @@ import matplotlib.animation as animation
 from matplotlib import cm
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-import time
+
 import datetime as dt
 import jdates as jd
 import sunmoon
@@ -35,6 +37,10 @@ import sunmoon
 #import funplot as fp
 #import plot_plist2 as pp2
 #import satpar as sp
+
+__author__ = "Jose Rodriguez"
+__license__ = "GPLv2"
+__email__ = "josrod@nerc.ac.uk"
 
 
 def dataFakeRead(f, init_pos=None, N_lines=140, print_lines=False):
