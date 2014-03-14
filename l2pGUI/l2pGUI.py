@@ -683,7 +683,7 @@ def main(argv=None):
     args = parser.parse_args()
     
     config = ConfigParser.RawConfigParser()
-    locs = [os.curdir, os.path.expanduser('~'), '/usr/l2pGUI', 
+    locs = [os.curdir, os.path.expanduser('~'), './', '/usr/l2pGUI', 
             os.path.join(os.path.dirname(sys.executable), 
             '/usr/l2pGUI'), '/usr/local/l2pGUI']
     
