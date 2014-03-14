@@ -22,6 +22,8 @@ the platform (probably /usr/l2pGUI/ on Linux). The coordinates
 of the observing station are needed to display the position of the Sun 
 correctly, and can be entered in the same configuration file.
 
+Requirements: Python (tested with 2.7), Matplotlib
+
 Install with pip: 
 
 pip install l2pGUI-master.zip
