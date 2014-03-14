@@ -3,13 +3,14 @@
 for listen2planes, an application that receives data from an ADS/B box 
 and sends it via TCP/IP upon request. Data is displayed on a polar plot 
 as traces for each individual plane. It can also be used offline by reading 
-a file of collected data, which can be re-played at many times the regular 
-collection speed.
+a file of previously collected data, which can be re-played at many times
+the normal update speed.
 
-The application needs to know the IP address of the l2planes server, and 
+The application needs to know the IP address of the l2planes server and 
 the coordinates of the observing station for correct determination of the 
-Sun/Moon positions. These can be set below.
+Sun/Moon positions. These can be set in the configuration file l2pGUI.cfg.
 '''
+
 import sys, os
 import numpy as np
 import Tkinter as Tk
@@ -31,9 +32,9 @@ import jdates as jd
 import sunmoon
 # The following modules are highly specific to NSGF,
 # of no use to anyone else and hence not included here
-import funplot as fp
-import plot_plist2 as pp2
-import satpar as sp
+#import funplot as fp
+#import plot_plist2 as pp2
+#import satpar as sp
 
 
 def dataFakeRead(f, init_pos=None, N_lines=140, print_lines=False):
@@ -102,12 +103,11 @@ def loadPlanesFile(fname, minel=-5):
     return P
 
 
-def planePlot(p_dict, key1=None, key2=None, skip=10, ls='.'):
+def planePlot(p_dict, key1='lon', key2='lat', skip=10):
     fig = plt.figure(1)
     ax = fig.add_subplot(111)
     for plane in p_dict.values():
-        ax.plot(getattr(plane, key1)[::skip], getattr(plane, key2)[::skip],
-                linestyle='-')
+        ax.plot(getattr(plane, key1)[::skip], getattr(plane, key2)[::skip])
     plt.show()
 
 
@@ -166,7 +166,7 @@ class Plane():
             self.epc.append(float(l[1]))
             if self.epc[-1] < self.last_epoch:
                 self.epc[-1] += 86000
-            if self.epc[-1] - self.last_epoch > 600:
+            if self.epc[-1] - self.last_epoch > 600000:
                 self.gaps = 1
                 del(self.epc[-1])
                 return
@@ -208,10 +208,10 @@ def addPlanes(planeLines, planes_dict, minel=-5, time_alive=-1):
         return P
     # Remove planes for which no beacons have been 
     # received for more than given time
-    if time_alive >= 0:
+    if time_alive > 0:
         last_epoch = float(l[1])
         keys = [k for k,v in P.iteritems() if 
-                                 abs(last_epoch - v.last_epoch) > time_alive]
+                abs(last_epoch - v.last_epoch) > time_alive]
         for key in keys:
             del P[key]
     return P
@@ -254,14 +254,14 @@ class L2pRadar(Tk.Tk):
                                          command=self.plotLimitDown, bg='grey')
         self.buttonRotate = Tk.Button(self.frameCtrls, text='Rot',
                                       command=self.plotRotate, bg='grey')
-        self.buttonHEO = Tk.Button(self.frameCtrls, text='HEO',
-                                   command=self.displayHEO, bg='grey')
+        #self.buttonHEO = Tk.Button(self.frameCtrls, text='HEO',
+                                   #command=self.displayHEO, bg='grey')
         self.buttonQuit = Tk.Button(self.frameCtrls, text='Quit',
                                     command=self.close, bg='grey')
         self.buttonLimitUp.pack(side='top', fill=Tk.X, pady=2)
         self.buttonLimitDown.pack(side='top', fill=Tk.X, pady=2)
         self.buttonRotate.pack(side='top', fill=Tk.X, pady=2)
-        self.buttonHEO.pack(side='top', fill=Tk.X, pady=2)
+        #self.buttonHEO.pack(side='top', fill=Tk.X, pady=2)
         self.buttonQuit.pack(side='top', fill=Tk.X, pady=2)
         self.protocol("WM_DELETE_WINDOW", self.close)
         self.framePlot = Tk.Frame(self.root)
@@ -439,8 +439,8 @@ class L2pRadar(Tk.Tk):
         Parameters
         ----------
         data_lines: list of data lines
-        print_output: boolean flag to request printed output
-        dump: boolean flag to request written output
+        print_lines: boolean flag to request printed output
+        dump2file: boolean flag to request written output
         
         Returns
         -------
@@ -471,7 +471,7 @@ class L2pRadar(Tk.Tk):
                                                   print_lines=self.print_lines,
                                                   dump2file=self.dump2file)
             self.P = addPlanes(planeLines, self.P, minel=0, time_alive=15)
-        # or read data from dump.out if requested
+        # or read it from dump file if so requested
         elif self.replay:
             planeLines, telLines, self.pos = (
                              dataFakeRead(self.datafile, self.pos,
@@ -520,13 +520,13 @@ class L2pRadar(Tk.Tk):
         self.points[0].set_data(x, map(self.el2zdist, y))
 
         # Display HEO satellites?
-        if (self.visHEO is True) and (i % 30 == 0):
-            self.plotHEO()
-        elif self.visHEO is False:
-            self.heos_line[0].set_data([], [])
-            self.txt_line.set_text('')
+        #if (self.visHEO is True) and (i % 30 == 0):
+            #self.plotHEO()
+        #elif self.visHEO is False:
+            #self.heos_line[0].set_data([], [])
+            #self.txt_line.set_text('')
             
-        # Telescope position
+        # Telescope position. Defaults to (0, 0).
         # 56692  41847.094 telscp  75.00  65.00 1
         telPos = self.telLines.split()[3:5]
         telAz = float(telPos[0]) * np.pi / 180
